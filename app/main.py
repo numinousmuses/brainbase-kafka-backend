@@ -2,6 +2,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import auth, workspace, chat
+from app.core.database import init_db
 
 app = FastAPI()
 
@@ -18,6 +19,9 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(workspace.router, prefix="/workspace", tags=["Workspace"])
 app.include_router(chat.router, prefix="/chat", tags=["Chat"])
+
+# Initialize the database (create tables if needed)
+init_db()
 
 # Optionally, add a simple root endpoint
 @app.get("/")
