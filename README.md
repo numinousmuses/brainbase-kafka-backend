@@ -154,13 +154,13 @@ Yes. The relationships in SQLAlchemy specify that a single `User` can be linked 
 
 
 
-## Endpoint Docs
+# Endpoint Docs
 
 Below is the updated documentation for the `/auth` endpoint:
 
 ---
 
-### `/auth/login`
+## `/auth/login`
 
 1. **Send a POST Request to `/auth`** (assuming you kept `prefix="/auth"` and the route path is `/`):
 
@@ -203,3 +203,39 @@ Below is the updated documentation for the `/auth` endpoint:
   - **Number of .based file versions** (calculated as the total count of versions across all files attached to that chat)
 
 This endpoint ensures that a user is created (along with a default workspace) if they do not already exist, and then returns all the relevant data for that user.
+
+## `/workspace/new`
+---
+
+### Sample Request
+
+Below is an example using `curl` to simulate the file upload from your Next.js app:
+
+```bash
+curl -X POST "http://127.0.0.1:8000/workspace/new" \
+  -F "owner_id=123e4567-e89b-12d3-a456-426614174000" \
+  -F "name=MyNewWorkspace" \
+  -F "files=@/path/to/document.pdf" \
+  -F "files=@/path/to/image.png"
+```
+
+- **owner_id & name:** Sent as form fields.
+- **files:** The actual files are attached using the `-F` flag.
+
+### Expected Response
+
+```json
+{
+  "workspace_id": "workspace-uuid-string",
+  "files": [
+    {
+      "file_id": "file-uuid-string",
+      "filename": "document.pdf"
+    },
+    {
+      "file_id": "another-file-uuid",
+      "filename": "image.png"
+    }
+  ]
+}
+```
