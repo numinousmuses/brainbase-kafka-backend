@@ -418,3 +418,71 @@ If the chat ID is not found, an error message will be returned:
 ```
 
 ---
+
+## `/file/{file_id}` and `/file/rename`
+
+### Sample Requests & Responses
+
+#### **Delete File Endpoint**
+
+**Sample Request (using curl):**
+
+```bash
+curl -X DELETE "http://127.0.0.1:8000/file/delete/123e4567-e89b-12d3-a456-426614174000"
+```
+
+**Expected Response:**
+
+```json
+{
+  "detail": "File deleted successfully."
+}
+```
+
+If the file is not found, the response will be:
+
+```json
+{
+  "detail": "File not found."
+}
+```
+
+---
+
+#### **Rename File Endpoint**
+
+**Sample Request (using curl):**
+
+```bash
+curl -X PATCH "http://127.0.0.1:8000/file/rename" \
+  -F "file_id=123e4567-e89b-12d3-a456-426614174000" \
+  -F "new_name=new_document.pdf"
+```
+
+**Expected Response:**
+
+```json
+{
+  "file_id": "123e4567-e89b-12d3-a456-426614174000",
+  "new_filename": "new_document.pdf",
+  "new_path": "uploads/files/123e4567-e89b-12d3-a456-426614174000_new_document.pdf"
+}
+```
+
+If the file is not found, the endpoint will return:
+
+```json
+{
+  "detail": "File not found."
+}
+```
+
+---
+
+### Explanation
+
+- **Delete Endpoint:**  
+  Uses a path parameter (`file_id`) to locate and delete the file record(s) from the database and remove the file from disk.
+
+- **Rename Endpoint:**  
+  Accepts `file_id` and `new_name` as form fields, renames the physical file on disk (by constructing a new unique filename) and updates the corresponding records in both the File and ChatFile tables, then returns the updated file information.

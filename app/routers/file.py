@@ -10,7 +10,7 @@ from app.core.database import get_db
 from app.models.file import File as FileModel  # Workspace file model
 from app.models.chat import Chat
 from app.models.chat_file import ChatFile
-from app.schemas.file import FileUploadResponse
+from app.schemas.file import FileUploadResponse, FileRenameResponse
 
 router = APIRouter()
 
@@ -117,3 +117,85 @@ async def upload_file(
     
     db.commit()
     return FileUploadResponse(files=uploaded_file_ids)
+
+
+@router.delete("/delete/{file_id}")
+def delete_file(file_id: str, db: Session = Depends(get_db)):
+    """
+    Delete a file by its file_id.
+    
+    This endpoint:
+      - Removes the file from disk.
+      - Deletes the record from the File table.
+      - If a corresponding record exists in the ChatFile table, deletes that record as well.
+    
+    Returns a confirmation message.
+    """
+    file_record = db.query(FileModel).filter(FileModel.id == file_id).first()
+    if not file_record:
+         raise HTTPException(status_code=404, detail="File not found.")
+    file_path = file_record.path
+    # Remove file from disk if it exists.
+    if os.path.exists(file_path):
+         os.remove(file_path)
+    # Delete file record from FileModel.
+    db.delete(file_record)
+    
+    # Also, if a corresponding record exists in ChatFile, delete it.
+    chat_file_record = db.query(ChatFile).filter(ChatFile.id == file_id).first()
+    if chat_file_record:
+         db.delete(chat_file_record)
+    
+    db.commit()
+    return {"detail": "File deleted successfully."}
+
+
+@router.patch("/rename", response_model=FileRenameResponse)
+def rename_file(
+    file_id: str = Form(...),
+    new_name: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Rename a file identified by file_id.
+    
+    - Updates the filename in the File and ChatFile records.
+    - Renames the file on disk. The new file path is constructed as: <file_id>_<new_name>
+    
+    Returns:
+      - **file_id:** The file's ID.
+      - **new_filename:** The new file name.
+      - **new_path:** The new file path.
+    """
+    file_record = db.query(FileModel).filter(FileModel.id == file_id).first()
+    if not file_record:
+         raise HTTPException(status_code=404, detail="File not found.")
+    
+    old_path = file_record.path
+    # Construct new filename and new path.
+    new_filename = new_name  # We'll store only the new name without the file_id prefix in the record.
+    new_unique_filename = f"{file_id}_{new_name}"
+    new_path = os.path.join(UPLOAD_DIRECTORY, new_unique_filename)
+    
+    # Rename the file on disk if it exists.
+    if os.path.exists(old_path):
+         os.rename(old_path, new_path)
+    
+    # Update FileModel record.
+    file_record.filename = new_name
+    file_record.path = new_path
+    db.add(file_record)
+    
+    # Update ChatFile record if exists.
+    chat_file_record = db.query(ChatFile).filter(ChatFile.id == file_id).first()
+    if chat_file_record:
+         chat_file_record.filename = new_name
+         chat_file_record.path = new_path
+         db.add(chat_file_record)
+    
+    db.commit()
+    return FileRenameResponse(
+        file_id=file_id,
+        new_filename=new_name,
+        new_path=new_path
+    )
