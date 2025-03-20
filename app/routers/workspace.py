@@ -14,7 +14,7 @@ from app.schemas.workspace import WorkspaceNewResponse, FileResponse
 router = APIRouter()
 
 # Define the upload directory for workspace files
-UPLOAD_DIRECTORY = "uploads/workspaces"
+UPLOAD_DIRECTORY = "uploads/files"
 os.makedirs(UPLOAD_DIRECTORY, exist_ok=True)
 
 @router.post("/new", response_model=WorkspaceNewResponse)

@@ -239,3 +239,75 @@ curl -X POST "http://127.0.0.1:8000/workspace/new" \
   ]
 }
 ```
+
+## `/file/upload`
+
+---
+
+### Example 1: Uploading Files to a Chat
+
+**Sample Request (using curl):**
+
+```bash
+curl -X POST "http://127.0.0.1:8000/file/upload" \
+  -F "user_id=123e4567-e89b-12d3-a456-426614174000" \
+  -F "target_id=chat-uuid-string" \
+  -F "is_chat=true" \
+  -F "files=@/path/to/document.pdf" \
+  -F "files=@/path/to/image.png"
+```
+
+**Explanation:**
+
+- **user_id:** The ID of the user uploading the files.
+- **target_id:** The chat ID (from which the parent workspace is inferred).
+- **is_chat:** Set to `true` so the files are added both to the chat and to the chat’s workspace.
+- **files:** Two actual files are being uploaded.
+
+**Sample Response:**
+
+```json
+{
+  "files": [
+    "file-uuid-string-1",
+    "file-uuid-string-2"
+  ]
+}
+```
+
+*The response returns a list of the generated file IDs for the uploaded files.*
+
+---
+
+### Example 2: Uploading Files to a Workspace
+
+**Sample Request (using curl):**
+
+```bash
+curl -X POST "http://127.0.0.1:8000/file/upload" \
+  -F "user_id=123e4567-e89b-12d3-a456-426614174000" \
+  -F "target_id=workspace-uuid-string" \
+  -F "is_chat=false" \
+  -F "files=@/path/to/document.pdf"
+```
+
+**Explanation:**
+
+- **user_id:** The ID of the user uploading the file.
+- **target_id:** The workspace ID to which the file should be added.
+- **is_chat:** Set to `false` so the file is only added to the workspace.
+- **files:** One actual file is being uploaded.
+
+**Sample Response:**
+
+```json
+{
+  "files": [
+    "file-uuid-string-3"
+  ]
+}
+```
+
+*The response returns a list with the generated file ID for the uploaded file.*
+
+---
