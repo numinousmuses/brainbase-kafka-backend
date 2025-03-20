@@ -9,3 +9,7 @@ class FileResponse(BaseModel):
 class WorkspaceNewResponse(BaseModel):
     workspace_id: str
     files: List[FileResponse] = []
+
+class WorkspaceRenameResponse(BaseModel):
+    workspace_id: str
+    new_name: str
