@@ -10,7 +10,7 @@ Methods
 
 ## Endpoint Docs
 
-### /auth/login
+### `/auth/login`
 
 1. **Send a POST Request to `/auth`** (assuming you kept `prefix="/auth"` and the route path is `"/"`):
 
