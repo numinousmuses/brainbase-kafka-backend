@@ -311,3 +311,46 @@ curl -X POST "http://127.0.0.1:8000/file/upload" \
 *The response returns a list with the generated file ID for the uploaded file.*
 
 ---
+
+## `/chat/new`
+
+### Sample Request Using `curl`
+
+Here’s an example request to create a new chat:
+
+```bash
+curl -X POST "http://127.0.0.1:8000/chat/new" \
+  -F "user_id=123e4567-e89b-12d3-a456-426614174000" \
+  -F "workspace_id=workspace-uuid-string" \
+  -F "chat_name=General Chat"
+```
+
+---
+
+### Expected Response
+
+A successful request might return a response like this:
+
+```json
+{
+  "chat_id": "generated-chat-uuid-string",
+  "name": "General Chat",
+  "last_updated": "2025-03-20T11:00:00.123456"
+}
+```
+
+---
+
+### Explanation
+
+- **Form Fields:**  
+  The endpoint expects three form fields:  
+  - `user_id`: The UUID of the user creating the chat.
+  - `workspace_id`: The UUID of the workspace where the chat will reside.
+  - `chat_name`: The name to assign to the new chat.
+  
+- **Timestamp:**  
+  The `last_updated` field is set to the current UTC timestamp (formatted in ISO 8601), ensuring that the chat record is properly initialized with a timestamp.
+  
+- **Database Interaction:**  
+  A new `Chat` record is created and added to the session. After committing and refreshing, the chat details are returned via the `ChatNewResponse` schema.
