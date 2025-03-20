@@ -214,6 +214,56 @@ async def chat_ws(websocket: WebSocket, chat_id: str):
                     new_messages.append(file_message)
                     conversation.append(file_message)
                     await websocket.send_json({"action": "file_uploaded", "message": file_message})
+                elif action == "new_message":
+                    # Expected keys: model, prompt, is_first_prompt, is_chat_or_composer
+                    model = message_data.get("model", "default_model")
+                    prompt = message_data.get("prompt", "")
+                    is_first_prompt = message_data.get("is_first_prompt", False)
+                    is_chat_or_composer = message_data.get("is_chat_or_composer", False)
+                    
+                    # Call the based agent handler.
+                    from app.core.basedagent import handle_new_message
+
+                    #find the model in the db and get the model ak and base url
+                    model = db.query(ModelModel).filter(ModelModel.name == model).first()
+                    if not model:
+                        await websocket.send_json({"error": "Model not found."})
+                        continue
+                    model_ak = model.ak
+                    model_base_url = model.base_url
+
+                    # Call the agent handler with the model ak and base url.
+                    result = handle_new_message(model, model_ak, model_base_url, prompt, is_first_prompt, is_chat_or_composer, conversation, chat_files_text)
+                    
+                    # Process result based on its type.
+                    if result["type"] in ["based", "diff"]:
+                        # For based responses, the agent returns a based filename.
+                        based_filename = result.get("based_filename", "unknown.based")
+                        # If first prompt or if this is a new based file, create a new chat file entry.
+                        # Otherwise, update the version history (here we simulate by returning a diff).
+                        agent_response = {
+                            "role": "assistant",
+                            "type": "file",  # Representing a based file response.
+                            "content": {
+                                "based_filename": based_filename,
+                                "based_content": result["output"]
+                            }
+                        }
+                        new_messages.append(agent_response)
+                        conversation.append(agent_response)
+                        await websocket.send_json({"action": "agent_response", "message": agent_response})
+                    elif result["type"] == "response":
+                        # Plain text response.
+                        agent_response = {
+                            "role": "assistant",
+                            "type": "text",
+                            "content": result.get("message", result["output"])
+                        }
+                        new_messages.append(agent_response)
+                        conversation.append(agent_response)
+                        await websocket.send_text(result.get("message", result["output"]))
+                    else:
+                        await websocket.send_json({"error": "Unknown response type from agent."})
                 else:
                     await websocket.send_json({"error": "Unknown action."})
             else:
