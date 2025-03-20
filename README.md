@@ -27,9 +27,9 @@ Below is a **visual/table-based** overview of the database schema.
     |   \
     |    \ 1..M
     |     \
-    |      ┌────────────────┐        ┌────────────────────┐
+    |      ┌────────────────┐        ┌─────────────────────┐
     |      │     Chat       │        │       File          │
-    |      │----------------│        │----------------------│
+    |      │----------------│        │---------------------│
     |      │ id (PK)        │        │ id (PK)             │
     |      │ name           │        │ filename            │
     |      │ last_updated   │        │ path                │
@@ -38,25 +38,25 @@ Below is a **visual/table-based** overview of the database schema.
     |      └────────────────┘
     |               | 1..M
     |               |  
-    |          ┌─────────────────────┐         ┌───────────────────────┐
-    |          │   ChatConversation │         │      ChatFile         │
+    |          ┌─────────────────────┐         ┌────────────────────────┐
+    |          │   ChatConversation  │         │      ChatFile          │
     |          │---------------------│         │------------------------│
-    |          │ id (PK)            │         │ id (PK)               │
-    |          │ role               │         │ filename               │
-    |          │ type               │         │ path                   │
-    |          │ content            │         │ chat_id (FK)           │
-    |          │ chat_id (FK)       │         └────────────────────────┘
+    |          │ id (PK)             │         │ id (PK)                │
+    |          │ role                │         │ filename               │
+    |          │ type                │         │ path                   │
+    |          │ content             │         │ chat_id (FK)           │
+    |          │ chat_id (FK)        │         └────────────────────────┘
     |          └─────────────────────┘
     |                     |
     |                     | 1..M
     |                     |
     |               ┌─────────────────────────┐
-    |               │    ChatFileVersion     │
+    |               │    ChatFileVersion      │
     |               │-------------------------│
-    |               │ id (PK)                │
-    |               │ timestamp              │
-    |               │ content                │
-    |               │ chat_file_id (FK)      │
+    |               │ id (PK)                 │
+    |               │ timestamp               │
+    |               │ content                 │
+    |               │ chat_file_id (FK)       │
     |               └─────────────────────────┘
     |
     └─> (Indicates a one-to-many relationship from User to Chats, Models, Workspaces)
