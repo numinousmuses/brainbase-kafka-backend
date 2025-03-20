@@ -1,7 +1,7 @@
 # app/main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import auth, workspace, chat, file
+from app.routers import auth, workspace, chat, file, model
 from app.core.database import init_db
 
 app = FastAPI()
@@ -20,6 +20,7 @@ app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(workspace.router, prefix="/workspace", tags=["Workspace"])
 app.include_router(chat.router, prefix="/chat", tags=["Chat"])
 app.include_router(file.router, prefix="/file", tags=["File"])
+app.include_router(model.router, prefix="/models", tags=["Model"])
 
 # Initialize the database (create tables if needed)
 init_db()

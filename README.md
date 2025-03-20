@@ -554,3 +554,54 @@ If the workspace is not found, the response will be:
 
 - **Delete Workspace (`DELETE /workspace/delete/{workspace_id}`):**  
   The endpoint deletes the workspace record from the database. Before deletion, it iterates through all file records associated with the workspace and removes the corresponding physical files from disk. Due to cascade deletion in your model, all related chats and file records are automatically removed.
+
+## `/models/new` and `DELETE /models/{model_id}`
+
+#### **Create New Model**
+
+**Sample Request (using curl):**
+
+```bash
+curl -X POST "http://127.0.0.1:8000/models/new" \
+  -F "user_id=123e4567-e89b-12d3-a456-426614174000" \
+  -F "name=Example Model" \
+  -F "ak=your-api-key" \
+  -F "base_url=http://api.example.com"
+```
+
+**Expected Response:**
+
+```json
+{
+  "id": "generated-model-uuid-string",
+  "name": "Example Model",
+  "base_url": "http://api.example.com",
+  "user_id": "123e4567-e89b-12d3-a456-426614174000"
+}
+```
+
+---
+
+#### **Delete a Model**
+
+**Sample Request (using curl):**
+
+```bash
+curl -X DELETE "http://127.0.0.1:8000/models/delete/generated-model-uuid-string"
+```
+
+**Expected Response:**
+
+```json
+{
+  "detail": "Model deleted successfully."
+}
+```
+
+If the model is not found, you’ll receive:
+
+```json
+{
+  "detail": "Model not found."
+}
+```
