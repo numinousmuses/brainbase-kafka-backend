@@ -354,3 +354,67 @@ A successful request might return a response like this:
   
 - **Database Interaction:**  
   A new `Chat` record is created and added to the session. After committing and refreshing, the chat details are returned via the `ChatNewResponse` schema.
+
+## DELETE `/chat/{chat_id}`
+
+### Sample Request
+
+Using `curl` to delete a chat by its ID:
+
+```bash
+curl -X DELETE "http://127.0.0.1:8000/chat/123e4567-e89b-12d3-a456-426614174000"
+```
+
+### Expected Response
+
+If the chat exists and is successfully deleted, you should receive a JSON response like:
+
+```json
+{
+  "detail": "Chat deleted successfully."
+}
+```
+
+If the chat does not exist, you'll receive an error:
+
+```json
+{
+  "detail": "Chat not found."
+}
+```
+
+---
+
+## PATCH `/chat/rename`
+
+### Sample Request
+
+Using `curl` to rename a chat by providing its ID and a new name (via form fields):
+
+```bash
+curl -X PATCH "http://127.0.0.1:8000/chat/rename" \
+  -F "chat_id=123e4567-e89b-12d3-a456-426614174000" \
+  -F "new_name=New Chat Name"
+```
+
+### Expected Response
+
+Upon successful renaming, the response will return the updated chat details, including the updated timestamp:
+
+```json
+{
+  "chat_id": "123e4567-e89b-12d3-a456-426614174000",
+  "name": "New Chat Name",
+  "last_updated": "2025-03-20T11:00:00.123456"
+}
+```
+
+If the chat ID is not found, an error message will be returned:
+
+```json
+{
+  "detail": "Chat not found."
+}
+```
+
+---
