@@ -486,3 +486,71 @@ If the file is not found, the endpoint will return:
 
 - **Rename Endpoint:**  
   Accepts `file_id` and `new_name` as form fields, renames the physical file on disk (by constructing a new unique filename) and updates the corresponding records in both the File and ChatFile tables, then returns the updated file information.
+
+
+## `/workspace/rename` and `DELETE /workspace/{workspace_id}`
+
+### Sample Requests & Responses
+
+#### **Rename Workspace**
+
+**Sample Request (using curl):**
+
+```bash
+curl -X PATCH "http://127.0.0.1:8000/workspace/rename" \
+  -F "workspace_id=workspace-uuid-string" \
+  -F "new_name=Renamed Workspace"
+```
+
+**Expected Response:**
+
+```json
+{
+  "workspace_id": "workspace-uuid-string",
+  "new_name": "Renamed Workspace"
+}
+```
+
+If the workspace is not found, the response will be:
+
+```json
+{
+  "detail": "Workspace not found."
+}
+```
+
+---
+
+#### **Delete Workspace**
+
+**Sample Request (using curl):**
+
+```bash
+curl -X DELETE "http://127.0.0.1:8000/workspace/delete/workspace-uuid-string"
+```
+
+**Expected Response:**
+
+```json
+{
+  "detail": "Workspace and all associated data deleted successfully."
+}
+```
+
+If the workspace is not found, the response will be:
+
+```json
+{
+  "detail": "Workspace not found."
+}
+```
+
+---
+
+### Explanation
+
+- **Rename Workspace (`PATCH /workspace/rename`):**  
+  The endpoint accepts `workspace_id` and `new_name` as form fields, updates the workspace's name, commits the change, and returns the updated details.
+
+- **Delete Workspace (`DELETE /workspace/delete/{workspace_id}`):**  
+  The endpoint deletes the workspace record from the database. Before deletion, it iterates through all file records associated with the workspace and removes the corresponding physical files from disk. Due to cascade deletion in your model, all related chats and file records are automatically removed.
