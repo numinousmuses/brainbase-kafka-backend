@@ -292,7 +292,7 @@ async def chat_ws(websocket: WebSocket, chat_id: str):
                             ChatMessage(role="assistant", type="text", content=agent_response["content"])
                         )
                         # Update chat.last_updated
-                        chat.last_updated = datetime.utcnow().isoformat()
+                        chat.last_updated = datetime.now(timezone.utc).isoformat()
                         db.commit()
 
                         # Return the plain text to the client
@@ -324,13 +324,13 @@ async def chat_ws(websocket: WebSocket, chat_id: str):
                         new_chat_file_version = ChatFileVersion(
                             id=new_version_id,
                             chat_file_id=new_based_file_id,
-                            timestamp=datetime.utcnow().isoformat(),
+                            timestamp=datetime.now(timezone.utc).isoformat(),
                             content=file_content
                         )
                         db.add(new_chat_file_version)
                         
                         # Update chat.last_updated
-                        chat.last_updated = datetime.utcnow().isoformat()
+                        chat.last_updated = datetime.now(timezone.utc).isoformat()
                         db.commit()
 
                         # 2c) Send a response to the frontend with the new file
@@ -343,8 +343,8 @@ async def chat_ws(websocket: WebSocket, chat_id: str):
                             }
                         }
                         new_messages.append(agent_response)
-                        conversation_objs.append(
-                            ChatMessage(
+
+                        new_convo_block = ChatMessage(
                                 role="assistant",
                                 type="file",
                                 content=json.dumps({
@@ -352,8 +352,8 @@ async def chat_ws(websocket: WebSocket, chat_id: str):
                                     "based_content": file_content
                                 })
                             )
-                        )
-                        await websocket.send_json({"action": "agent_response", "message": agent_response})
+                        conversation_objs.append(new_convo_block)
+                        await websocket.send_json({"action": "agent_response", "message": agent_response, "block": new_convo_block})   
 
                     elif result["type"] == "diff":
                         #
@@ -402,7 +402,7 @@ async def chat_ws(websocket: WebSocket, chat_id: str):
                         new_version = ChatFileVersion(
                             id=new_version_id,
                             chat_file_id=chat_file_id,
-                            timestamp=datetime.utcnow().isoformat(),
+                            timestamp=datetime.now(timezone.utc).isoformat(),
                             content=new_content
                         )
                         db.add(new_version)
