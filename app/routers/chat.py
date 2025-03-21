@@ -1,6 +1,6 @@
 # app/routers/chat.py
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Form, HTTPException
 from sqlalchemy.orm import Session
 
@@ -35,7 +35,7 @@ def create_chat(
       - **last_updated**: The current timestamp as an ISO 8601 string.
     """
     chat_id = str(uuid.uuid4())
-    current_timestamp = datetime.utcnow().isoformat()
+    current_timestamp = datetime.now(timezone.utc).isoformat()
 
     new_chat = Chat(
         id=chat_id,
@@ -93,7 +93,7 @@ def rename_chat(
          raise HTTPException(status_code=404, detail="Chat not found.")
     
     chat.name = new_name
-    chat.last_updated = datetime.utcnow().isoformat()
+    chat.last_updated = datetime.now(timezone.utc).isoformat()
     
     db.commit()
     db.refresh(chat)
