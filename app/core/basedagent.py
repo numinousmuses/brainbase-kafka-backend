@@ -1,12 +1,12 @@
 # app/core/basedagent.py
 from openai import OpenAI
 from tokencost import count_message_tokens, count_string_tokens
-from app.core.config import BASED_GUIDE
+from app.core.config import BASED_GUIDE, VALIDATION_ENDPOINT
 import requests
 import app.core.unifieddiff as unifieddiff
 from schemas.basedagent import BasedAgentOutput
 
-VALIDATION_ENDPOINT = "https://brainbase-engine-python.onrender.com/validate"
+
 
 def validate_based_code(code: str) -> dict:
     """

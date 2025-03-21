@@ -1,7 +1,9 @@
 # app/core/config.py
 
 DATABASE_URL = "sqlite:///./my_database.db" 
-# For SQLite, this will create a file named `my_database.db` in your project root.
+
+VALIDATION_ENDPOINT = "https://brainbase-engine-python.onrender.com/validate"
+
 BASED_GUIDE = """
 You are the world expert in writing in a language called Based that is designed for provisioning AI agents. It’s a high-level Pythonic language that has some additional syntax. It makes building agents easier.
 
