@@ -398,27 +398,17 @@ def triageContext(
     Triage context for the based agent.
     
     This function builds a detailed system prompt that instructs the LLM to filter and
-    extract the useful context for generating Based code. It incorporates:
-      - The BASED_GUIDE (imported from app/core/config.py)
-      - The user prompt
-      - The conversation history (formatted with line numbers)
-      - The content of non-based chat files
-      - Details of the selected based file (if provided)
-      - A list of other based files present in the chat
-     
-    The desired output from the LLM should be a JSON object containing:
-      - "summary": A text summary of the useful context.
-      - "extraction_indices": A 2D array of line number indices indicating which portions 
-                              of the context are relevant.
-      - "genNewFile": A boolean indicating whether to generate a new Based file (true) 
-                      or update the existing one (false).
-      - "selected_tools": (Optional) A list of tools to be used in the next prompt.
-      - "files_list": A list of file names to include as context.
-      - "plain_response": (Optional) Boolean flag if only a plain text response is desired.
-    
-    This function then extracts the relevant context lines based on the provided extraction indices,
-    and returns them as an additional key "extracted_context" in the output.
+    extract the useful context for generating Based code. It includes:
+      - The entire .based file content (both for the selected file and others).
+      - The entire text from .txt/.pdf files.
+      - The conversation history (formatted with line numbers).
+      - A user prompt.
+      - The BASED_GUIDE.
+      
+    The LLM must output a JSON object with triage info:
+      - summary, extraction_indices, genNewFile, files_list, plain_response, etc.
     """
+
     # Build the structured system prompt.
     system_prompt = (
         "You are the context filter for an agent in charge of generating Based code. "
@@ -427,72 +417,85 @@ def triageContext(
         f"{BASED_GUIDE}\n\n"
         "You are provided with the following context:\n"
     )
-    
-    # Format conversation history with line numbers.
+
+    # 1) Format the conversation with line numbers
     formatted_conversation = "\n".join(
         [f"{i+1}: {msg['role']} - {msg['content']}" for i, msg in enumerate(conversation)]
     )
-    
-    # Format non-based chat files.
+
+    # 2) Format non-based chat files (e.g., .txt/.pdf) – show entire content
     formatted_chat_files = "\n".join(
-        [f"{i+1}: {f['name']} - {f['content'][:100]}..." for i, f in enumerate(chat_files_text)]
+        [
+            f"{i+1}: {f['name']} - {f['content']}"
+            for i, f in enumerate(chat_files_text)
+        ]
     ) if chat_files_text else "None"
-    
-    # Format other based files.
-    formatted_other_based = "\n".join(
-        [f"{i+1}: {bf['name']}" for i, bf in enumerate(other_based_files)]
-    ) if other_based_files else "None"
-    
-    # Include details of the selected based file if present.
-    selected_info = f"Selected based file: {selected_based_file.get('name')}" if selected_based_file else "No selected based file."
-    
-    # Combine all context.
+
+    # 3) Format .based files – show entire latest_content
+    #    a) The "other" based files
+    formatted_other_based = "None"
+    if other_based_files:
+        lines = []
+        for i, bf in enumerate(other_based_files, start=1):
+            # Show entire latest_content if it exists
+            latest_content = bf.get("latest_content", "")
+            lines.append(
+                f"{i}: Name: {bf['name']}\nLatest content:\n{latest_content}\n"
+            )
+        formatted_other_based = "\n".join(lines)
+
+    #    b) The selected based file (if any)
+    if selected_based_file:
+        selected_info = (
+            f"Selected based file: {selected_based_file.get('name')}\n"
+            f"Full content:\n{selected_based_file.get('latest_content', '')}\n"
+        )
+    else:
+        selected_info = "No selected based file."
+
+    # 4) Combine everything into the system prompt
     full_context = (
         system_prompt +
         "User prompt:\n" + prompt + "\n\n" +
         "Conversation history:\n" + formatted_conversation + "\n\n" +
         "Chat text files (non-based):\n" + formatted_chat_files + "\n\n" +
-        "Other based files in the chat:\n" + formatted_other_based + "\n\n" +
+        "Other based files:\n" + formatted_other_based + "\n\n" +
         selected_info + "\n\n" +
         "Based on this context, produce a JSON output with the following keys:\n"
         " - summary: a text summary of useful context\n"
-        " - extraction_indices: a 2D array of line number indices indicating useful parts to be extracted from the above conversation\n"
+        " - extraction_indices: a 2D array of line number indices indicating which parts of the above conversation are relevant\n"
         " - genNewFile: a boolean indicating whether a new file should be generated (true) or the current file should be updated (false)\n"
         " - files_list: a list of file names to include as context\n"
         " - plain_response: (optional) if only a plain text response is desired\n\n"
         "Return only valid JSON."
     )
-    
-    # Build the conversation for the LLM call.
+
+    # 5) Build the conversation for the LLM call
     llm_conversation = [
         {"role": "system", "content": full_context},
         {"role": "user", "content": "Based on the context above, provide your JSON output."}
     ]
-    
-    # Call the LLM with our context.
+
+    # 6) Call the LLM with our context
     response = prompt_llm_json_output(
         conversation=llm_conversation,
         model=model,
         base_url=model_base_url,
         api_key=model_ak
     )
-    
-    # Parse and post-process the triage result.
-    # Expected keys: "summary", "extraction_indices", "genNewFile", "files_list", "plain_response"
-    # If extraction_indices is provided, extract the relevant lines from the formatted conversation.
+
+    # 7) Post-process extraction_indices
     extraction_indices = response.get("extraction_indices", [])
     extracted_context = ""
     if extraction_indices:
-        # extraction_indices is expected to be a 2D array like [[start1, end1], [start2, end2], ...]
+        # Combine conversation lines into a list
         lines = formatted_conversation.split("\n")
         extracted_lines = []
-        for index_pair in extraction_indices:
-            if isinstance(index_pair, list) and len(index_pair) == 2:
-                start, end = index_pair
-                # Adjust indices to Python (0-indexed)
+        for pair in extraction_indices:
+            if isinstance(pair, list) and len(pair) == 2:
+                start, end = pair
                 extracted_lines.extend(lines[start-1:end])
         extracted_context = "\n".join(extracted_lines)
-    
-    # Include extracted context in the triage result.
+
     response["extracted_context"] = extracted_context
     return response
