@@ -871,6 +871,49 @@ or, wrapped:
 
 ---
 
+### 3.5. `"delete_file"`
+
+**Handled by** a new `delete_file.py` → `handle_delete_file(...)` (or a similar file).  
+
+#### Request
+
+```json
+{
+  "action": "delete_file",
+  "file_id": "some-file-id"
+}
+```
+
+#### Server Steps
+
+1. Looks up the file referenced by `file_id` in the **`ChatFile`** table for this chat.
+2. (Optionally) deletes the actual file from disk (if it exists).
+3. Removes the record from **`ChatFile`** (detaching it from the chat).
+4. Also removes it from the workspace’s **`File`** table if present.
+5. Commits the database changes.
+6. Appends a **system** message to the in-memory conversation to record the deletion.
+7. Returns a message indicating the file has been removed.
+
+#### Response
+
+```json
+{
+  "action": "file_deleted",
+  "message": {
+    "role": "system",
+    "type": "file",
+    "content": {
+      "deleted_file_id": "some-file-id",
+      "filename": "the-original-filename.ext"
+    }
+  }
+}
+```
+
+The `"role": "system"` message can be used to reflect that the server performed the deletion. The client can listen for `"file_deleted"` to remove the file from its UI.
+
+---
+
 ## 4. Unknown Actions
 
 When `"action"` is present but not recognized:
