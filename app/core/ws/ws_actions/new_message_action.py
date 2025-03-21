@@ -1,153 +1,18 @@
-# app/routers/ws_actions.py
 import json
 import uuid
-import os
 from datetime import datetime, timezone
+
 from fastapi import WebSocket
 from sqlalchemy.orm import Session
-import base64
 
-from schemas.ws import ChatMessage, ChatFileBasedVersion
-from app.core.basedagent import handle_new_message
-from app.models.chat_file import ChatFile
-from app.models.chat_file_version import ChatFileVersion
-from app.models.file import File as FileModel
+from schemas.ws import ChatMessage
 from app.models.model import Model as ModelModel
 from app.models.chat import Chat
+from app.models.chat_file import ChatFile
+from app.models.chat_file_version import ChatFileVersion
 import app.core.unifieddiff as unifieddiff
 
-
-async def handle_action(
-    db: Session, 
-    websocket: WebSocket, 
-    raw_data: str, 
-    conversation_objs: list, 
-    chat: Chat,
-    chat_files_based_objs: list,
-    chat_files_text_objs: list
-):
-    """
-    Reads raw_data, parses JSON, checks 'action' key, and calls the appropriate sub-function.
-    If no action is given, we treat it as plain text.
-    """
-
-    try:
-        message_data = json.loads(raw_data)
-    except Exception:
-        message_data = None
-
-    if not message_data or "action" not in message_data:
-        # treat as plain text
-        await handle_plain_text(raw_data, conversation_objs, websocket)
-        return
-
-    action = message_data["action"]
-    if action == "upload_file":
-        await handle_upload_file(db, websocket, message_data, conversation_objs, chat)
-    elif action == "new_message":
-        await handle_new_message_action(
-            db,
-            websocket,
-            message_data,
-            conversation_objs,
-            chat,
-            chat_files_based_objs,
-            chat_files_text_objs
-        )
-    elif action == "revert_version":
-        await handle_revert_version(db, websocket, message_data, conversation_objs, chat)
-    else:
-        await websocket.send_json({"error": f"Unknown action: {action}"})
-
-
-async def handle_plain_text(raw_data: str, conversation_objs: list, websocket: WebSocket):
-    """
-    If no 'action' is provided, handle as a plain text user message.
-    """
-    user_message = ChatMessage(
-        role="user",
-        type="text",
-        content=raw_data
-    )
-    conversation_objs.append(user_message)
-
-    # Echo response
-    response_text = f"Echo: {raw_data}"
-    assistant_message = ChatMessage(
-        role="assistant",
-        type="text",
-        content=response_text
-    )
-    conversation_objs.append(assistant_message)
-    await websocket.send_text(response_text)
-
-
-async def handle_upload_file(
-    db: Session, 
-    websocket: WebSocket, 
-    message_data: dict, 
-    conversation_objs: list, 
-    chat: Chat
-):
-    """
-    Handle 'upload_file' action. 
-    Frontend sends:
-    {
-      "action": "upload_file",
-      "filename": "some.pdf",
-      "file_data": "base64-encoded content..."
-    }
-    We decode, save the file, create ChatFile + File if needed, 
-    then add a message to the conversation.
-    """
-    filename = message_data.get("filename")
-    file_data_b64 = message_data.get("file_data")
-    if not filename or not file_data_b64:
-        await websocket.send_json({"error": "Missing filename or file_data."})
-        return
-
-    file_bytes = base64.b64decode(file_data_b64)
-    file_id = str(uuid.uuid4())
-    unique_filename = f"{file_id}_{filename}"
-    file_path = os.path.join("uploads/files", unique_filename)
-
-    # Save file to disk
-    with open(file_path, "wb") as f:
-        f.write(file_bytes)
-
-    # Create a record in ChatFile for this chat
-    new_chat_file = ChatFile(
-        id=file_id,
-        filename=filename,
-        path=file_path,
-        chat_id=chat.id
-    )
-    db.add(new_chat_file)
-
-    # Also add the file to the workspace's File table if not already present
-    existing_file = db.query(FileModel).filter(FileModel.id == file_id).first()
-    if not existing_file:
-        new_file = FileModel(
-            id=file_id,
-            filename=filename,
-            path=file_path,
-            workspace_id=chat.workspace_id
-        )
-        db.add(new_file)
-    db.commit()
-
-    # Add a 'file' message to conversation
-    file_message = ChatMessage(
-        role="user",
-        type="file",
-        content={
-            "file_id": file_id,
-            "filename": filename,
-            "path": file_path
-        }
-    )
-    conversation_objs.append(file_message)
-    await websocket.send_json({"action": "file_uploaded", "message": file_message})
+from app.core.basedagent import handle_new_message
 
 
 async def handle_new_message_action(
@@ -323,7 +188,7 @@ async def handle_new_message_action(
         )
         db.add(new_version)
 
-        # Optionally recompute older diffs
+        # Optionally recompute older diffs (not always needed, but included here)
         older_diffs = []
         all_versions = (
             db.query(ChatFileVersion)
@@ -365,84 +230,3 @@ async def handle_new_message_action(
         await websocket.send_json({"action": "agent_response", "message": agent_response})
     else:
         await websocket.send_json({"error": "Unknown response type from agent."})
-
-
-async def handle_revert_version(
-    db: Session, 
-    websocket: WebSocket, 
-    message_data: dict, 
-    conversation_objs: list,
-    chat: Chat
-):
-    """
-    The frontend should send:
-    {
-        "action": "revert_version",
-        "version_id": "...",
-        "filename": "..."  # or ID
-    }
-
-    Steps:
-    1) Find the older ChatFileVersion
-    2) Create a new ChatFileVersion with same content
-    3) Update chat.last_updated
-    4) Return agent_response with new content
-    """
-
-    version_id = message_data.get("version_id")
-    filename = message_data.get("filename")
-    if not version_id or not filename:
-        await websocket.send_json({"error": "Missing version_id or filename for revert_version."})
-        return
-
-    # 1) Find older version
-    old_version = db.query(ChatFileVersion).filter(ChatFileVersion.id == version_id).first()
-    if not old_version:
-        await websocket.send_json({"error": f"No version found for version_id={version_id}"})
-        return
-
-    # 2) Find corresponding ChatFile by filename
-    chat_file = db.query(ChatFile).filter(ChatFile.filename == filename).first()
-    if not chat_file:
-        await websocket.send_json({"error": f"No .based file found for filename={filename}"})
-        return
-
-    # 3) Create new ChatFileVersion
-    new_version_id = str(uuid.uuid4())
-    revert_version = ChatFileVersion(
-        id=new_version_id,
-        chat_file_id=chat_file.id,
-        timestamp=datetime.now(timezone.utc).isoformat(),
-        content=old_version.content
-    )
-    db.add(revert_version)
-
-    # Update chat.last_updated
-    chat.last_updated = datetime.now(timezone.utc).isoformat()
-    db.commit()
-
-    # 4) Return updated .based file info
-    agent_response = {
-        "role": "assistant",
-        "type": "file",
-        "content": {
-            "based_filename": chat_file.filename,
-            "based_content": old_version.content,
-            "message": f"Reverted to version {version_id}; new version is {new_version_id}"
-        }
-    }
-
-    # Optionally log to conversation
-    conversation_objs.append(
-        ChatMessage(
-            role="assistant",
-            type="file",
-            content=json.dumps({
-                "based_filename": chat_file.filename,
-                "based_content": old_version.content,
-                "revert_notice": f"Reverted from version {version_id}"
-            })
-        )
-    )
-
-    await websocket.send_json({"action": "revert_complete", "message": agent_response})

@@ -64,7 +64,7 @@ async def chat_ws(websocket: WebSocket, chat_id: str):
         # 6) On disconnect, persist any conversation changes to the DB (and close the socket)
         await persist_on_disconnect(
             db=db,
-            chat_id=chat.id,
+            chat_id=chat_id,
             conversation_objs=conversation_objs,
             websocket=websocket
         )
