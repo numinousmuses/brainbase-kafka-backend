@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 import PyPDF2
 
 # Import our diff functions from unifieddiff.py
-import unifieddiff
+import app.core.unifieddiff as unifieddiff
 
 from app.core.database import get_db
 from app.models.chat import Chat
@@ -18,6 +18,7 @@ from app.models.chat_conversation import ChatConversation
 from app.models.chat_file_version import ChatFileVersion
 from app.models.file import File as FileModel
 from app.models.model import Model as ModelModel
+from app.core.basedagent import handle_new_message
 
 router = APIRouter()
 
@@ -215,25 +216,38 @@ async def chat_ws(websocket: WebSocket, chat_id: str):
                     conversation.append(file_message)
                     await websocket.send_json({"action": "file_uploaded", "message": file_message})
                 elif action == "new_message":
-                    # Expected keys: model, prompt, is_first_prompt, is_chat_or_composer
-                    model = message_data.get("model", "default_model")
+                    # Expected keys: model, prompt, is_first_prompt, is_chat_or_composer, selected_filename
+                    model_name = message_data.get("model", "default_model")
                     prompt = message_data.get("prompt", "")
                     is_first_prompt = message_data.get("is_first_prompt", False)
                     is_chat_or_composer = message_data.get("is_chat_or_composer", False)
+                    # Extract the selected filename for the based file (if any)
+                    selected_filename = message_data.get("selected_filename", None)
                     
-                    # Call the based agent handler.
-                    from app.core.basedagent import handle_new_message
-
-                    #find the model in the db and get the model ak and base url
-                    model = db.query(ModelModel).filter(ModelModel.name == model).first()
-                    if not model:
+                    # Look up the model in the db and get its ak and base_url.
+                    model_obj = db.query(ModelModel).filter(ModelModel.name == model_name).first()
+                    if not model_obj:
                         await websocket.send_json({"error": "Model not found."})
                         continue
-                    model_ak = model.ak
-                    model_base_url = model.base_url
+                    model_ak = model_obj.ak
+                    model_base_url = model_obj.base_url
+
+                    # Separate out the selected based file and the rest of the based files.
+                    selected_based_file = None
+                    other_based_files = []
+                    for bf in chat_files_based:
+                        if selected_filename and bf["name"] == selected_filename:
+                            selected_based_file = bf
+                        else:
+                            other_based_files.append(bf)
+                    # If no file was explicitly selected, then treat all based files as "other".
+                    if selected_based_file is None:
+                        other_based_files = chat_files_based
 
                     # Call the agent handler with the model ak and base url.
-                    result = handle_new_message(model, model_ak, model_base_url, prompt, is_first_prompt, is_chat_or_composer, conversation, chat_files_text)
+                    
+
+                    result = handle_new_message(model_name, model_ak, model_base_url, selected_filename, selected_based_file, prompt, is_first_prompt, is_chat_or_composer, conversation, chat_files_text, other_based_files)
                     
                     # Process result based on its type.
                     if result["type"] in ["based", "diff"]:

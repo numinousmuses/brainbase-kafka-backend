@@ -1,8 +1,21 @@
 # app/core/basedagent.py
 from openai import OpenAI
 from tokencost import count_message_tokens, count_string_tokens
+from app.core.config import BASED_GUIDE
 
-def handle_new_message(model: str, prompt: str, is_first_prompt: bool, is_chat_or_composer: bool, conversation: list, chat_files_text: list):
+def handle_new_message(
+        model: str, 
+        model_ak: str, 
+        model_base_url: str, 
+        selected_filename: str,
+        selected_based_file: str, 
+        prompt: str, 
+        is_first_prompt: bool, 
+        is_chat_or_composer: bool, 
+        conversation: list, 
+        chat_files_text: list, 
+        other_based_files: list
+    ) -> dict:
     """
     Process a new message using the Based agent logic.
     
@@ -120,3 +133,94 @@ def prompt_llm_json_output(
         response_message = dict(response_message)
     
     return response_message
+
+def triageContext(
+    selected_based_file: dict,
+    is_first_prompt: bool,
+    prompt: str,
+    conversation: list,
+    chat_files_text: list,
+    other_based_files: list,
+    model: str,
+    model_ak: str,
+    model_base_url: str
+) -> dict:
+    """
+    Triage context for the based agent.
+    
+    This function builds a detailed system prompt that instructs the LLM to filter and
+    extract the useful context for generating Based code. It incorporates:
+      - The BASED_GUIDE (imported from app/core/config.py)
+      - The user prompt
+      - The conversation history (formatted with line numbers)
+      - The content of non-based chat files
+      - Details of the selected based file (if provided)
+      - A list of other based files present in the chat
+     
+    The desired output from the LLM should be a JSON object containing:
+      - "summary": A text summary of the useful context.
+      - "extraction_indices": A 2D array of indices (line numbers) indicating which portions of the context are relevant.
+      - "genNewFile": A boolean indicating whether to generate a new Based file (True) or edit the existing one (False).
+      - "selected_tools": A list of tools to be used in the next prompt.
+      - "files_list": A list of file names to consider.
+    
+    The function then calls prompt_llm_json_output with the constructed conversation and returns the parsed JSON response.
+    """
+    # Build the structured system prompt.
+    system_prompt = (
+        "You are the context filter for an agent in charge of generating Based code. "
+        "Your job is to review the provided context and determine which parts are most useful for the next generation step. "
+        "Below is the BASED_GUIDE that explains the conventions and requirements:\n\n"
+        f"{BASED_GUIDE}\n\n"
+        "You are provided with the following context:\n"
+    )
+    
+    # Format conversation history with line numbers.
+    formatted_conversation = "\n".join(
+        [f"{i+1}: {msg['role']} - {msg['content']}" for i, msg in enumerate(conversation)]
+    )
+    
+    # Format non-based chat files.
+    formatted_chat_files = "\n".join(
+        [f"{i+1}: {f['name']} - {f['content'][:100]}..." for i, f in enumerate(chat_files_text)]
+    ) if chat_files_text else "None"
+    
+    # Format other based files.
+    formatted_other_based = "\n".join(
+        [f"{i+1}: {bf['name']}" for i, bf in enumerate(other_based_files)]
+    ) if other_based_files else "None"
+    
+    # Include details of the selected based file if present.
+    selected_info = f"Selected based file: {selected_based_file.get('name')}" if selected_based_file else "No selected based file."
+    
+    # Combine all context.
+    full_context = (
+        system_prompt +
+        "User prompt:\n" + prompt + "\n\n" +
+        "Conversation history:\n" + formatted_conversation + "\n\n" +
+        "Chat text files (non-based):\n" + formatted_chat_files + "\n\n" +
+        "Other based files in the chat:\n" + formatted_other_based + "\n\n" +
+        selected_info + "\n\n" +
+        "Based on this context, produce a JSON output with the following keys:\n"
+        " - summary: a text summary of useful context\n"
+        " - extraction_indices: a 2D array of line number indices indicating useful parts to be extracted from this prompt and included in the prompt for the generator agent\n"
+        " - genNewFile: a boolean indicating whether a new file should be generated (true) or the current file should be updated (false)\n"
+        " - files_list: a list of file names to include as context\n\n"
+        "Return only valid JSON."
+    )
+    
+    # Build the conversation for the LLM call.
+    llm_conversation = [
+        {"role": "system", "content": full_context},
+        {"role": "user", "content": "Based on the context above, provide your JSON output."}
+    ]
+    
+    # Call the LLM with our context.
+    response = prompt_llm_json_output(
+        conversation=llm_conversation,
+        model=model,
+        base_url=model_base_url,
+        api_key=model_ak
+    )
+    
+    return response
