@@ -1,4 +1,4 @@
-# app/routers/chat.py
+# app/routers/ws.py
 import os
 import uuid
 import json
@@ -7,6 +7,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, HTTPException
 from sqlalchemy.orm import Session
 import PyPDF2
+from schemas.ws import WsInitialPayload, ChatMessage, ChatFileText, ChatFileBased, WorkspaceFile
 
 # Import our diff functions from unifieddiff.py
 import app.core.unifieddiff as unifieddiff

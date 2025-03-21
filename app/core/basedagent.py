@@ -4,6 +4,7 @@ from tokencost import count_message_tokens, count_string_tokens
 from app.core.config import BASED_GUIDE
 import requests
 import app.core.unifieddiff as unifieddiff
+from schemas.basedagent import BasedAgentOutput
 
 VALIDATION_ENDPOINT = "https://brainbase-engine-python.onrender.com/validate"
 
