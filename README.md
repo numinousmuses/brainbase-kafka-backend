@@ -605,3 +605,300 @@ If the model is not found, you’ll receive:
   "detail": "Model not found."
 }
 ```
+
+# Websocket Docs
+
+---
+
+## 1. High-Level Flow
+
+When a client connects to:
+
+```
+/ws/{chat_id}
+```
+
+the following occurs:
+
+1. **`ws_router.py`**:
+   - Accepts the WebSocket connection.
+   - Calls **`build_initial_payload(...)`** (from `ws_initpayload.py`) to load:
+     - The `Chat` record,
+     - Its conversation,
+     - Any attached files (both text-based and `.based`),
+     - Any additional workspace files,
+     - A list of model names available to the user.
+   - Sends the **initial payload** back to the client as JSON.
+
+2. The server then enters a **loop**:
+   - Waits for the client to send a message (plain text or JSON).
+   - Hands that message to **`handle_action(...)`** (in `ws_actions.py`), which **dispatches** to the correct handler based on the `"action"` key (e.g., `"upload_file"`, `"new_message"`, `"revert_version"`, or if no `"action"`, treat as **plain text**).
+
+3. On **WebSocketDisconnect**, `ws_disconnect.py`’s **`persist_on_disconnect(...)`** is called:
+   - Persists any in-memory conversation messages into the DB.
+   - Closes the WebSocket gracefully.
+
+**Important**: Splitting the code into multiple modules **does not** change the **JSON request/response structure**. The front-end can continue to send and receive messages in the same format.
+
+---
+
+## 2. Initial Payload
+
+Upon connecting, the client receives a **JSON** payload shaped like this:
+
+```jsonc
+{
+  "chat_id": "string",
+  "conversation": [
+    {
+      "role": "user" | "assistant" | "system",
+      "type": "text" | "file",
+      "content": "string or JSON"
+    },
+    ...
+  ],
+  "chat_files_text": [
+    {
+      "file_id": "string",
+      "name": "example.txt",
+      "content": "Content extracted from file (text or path for images)",
+      "type": "text" | "image"
+    },
+    ...
+  ],
+  "chat_files_based": [
+    {
+      "file_id": "string",
+      "name": "some_file.based",
+      "latest_content": "Full .based file content",
+      "versions": [
+        {
+          "version_id": "string",
+          "timestamp": "ISO-8601 datetime",
+          "diff": "unified diff from this version to the newest version"
+        },
+        ...
+      ],
+      "type": "based"
+    }
+    ...
+  ],
+  "workspace_files": [
+    {
+      "file_id": "string",
+      "name": "some_workspace_file.txt"
+    },
+    ...
+  ],
+  "workspace_id": "string",
+  "models": [
+    "model_a",
+    "model_b"
+    ...
+  ]
+}
+```
+
+### Where is this built?
+
+- **`ws_initpayload.py`** → `build_initial_payload(...)`:
+  - Loads the `Chat` + conversation from the DB.
+  - Gathers `.txt`, `.pdf`, `.jpg`, and `.based` files.
+  - Constructs `WsInitialPayload` → uses **pydantic** to produce a final JSON to send.
+
+**No changes** to the data structure—only the function location changed.
+
+---
+
+## 3. Message Actions
+
+After sending the initial payload, the server **listens** for client messages in a loop. All messages arrive in `ws_router.py`, are routed through `handle_action(...)` (from `ws_actions.py`), which delegates to **sub-handlers**:
+
+1. **Plain Text** (no `"action"`) → `handle_plain_text(...)`
+2. **`"upload_file"`** → `handle_upload_file(...)`
+3. **`"new_message"`** → `handle_new_message_action(...)`
+4. **`"revert_version"`** → `handle_revert_version(...)`
+5. Otherwise → `{"error": "Unknown action: XXX"}`
+
+### 3.1. Plain Text
+
+If the client message has **no** `"action"` field or is **invalid JSON**, it is treated as **plain text** by `handle_plain_text.py`.
+
+- **Example**:
+
+  **Client**:
+  ```text
+  Hello, are you there?
+  ```
+
+  **Server**:
+  ```text
+  Echo: Hello, are you there?
+  ```
+
+The server simply **echoes** the content (for demonstration). The new user message and the echoed assistant message get added to the in-memory conversation list.
+
+---
+
+### 3.2. `"upload_file"`
+
+**Handled by** `upload_file.py` → `handle_upload_file(...)`.
+
+#### Request
+
+```json
+{
+  "action": "upload_file",
+  "filename": "example.pdf",
+  "file_data": "<BASE64 ENCODED BYTES>"
+}
+```
+
+#### Server Steps
+
+1. Decodes `file_data` from base64.
+2. Saves file to disk, e.g., `"uploads/files/<UUID>_example.pdf"`.
+3. Creates a `ChatFile` DB record (and `File` in the workspace if needed).
+4. Appends a **file message** to the conversation.
+
+#### Response
+
+```json
+{
+  "action": "file_uploaded",
+  "message": {
+    "role": "user",
+    "type": "file",
+    "content": {
+      "file_id": "<UUID>",
+      "filename": "example.pdf",
+      "path": "uploads/files/<UUID>_example.pdf"
+    }
+  }
+}
+```
+
+---
+
+### 3.3. `"new_message"`
+
+**Handled by** `new_message_action.py` → `handle_new_message_action(...)`.
+
+#### Request
+
+```json
+{
+  "action": "new_message",
+  "model": "gpt-4",
+  "prompt": "Explain this PDF's content.",
+  "is_first_prompt": false,
+  "is_chat_or_composer": false,
+  "selected_filename": null  // or "someFile.based"
+}
+```
+
+#### Server Steps
+
+1. Adds a **user** message (`role="user"`, `type="text"`) to the conversation.
+2. Fetches the chosen model from DB.
+3. Calls **`handle_new_message(...)`** from `app.core.basedagent` with:
+   - The entire conversation,
+   - All text-based files,
+   - The selected `.based` file (if any),
+   - The “other” `.based` files.
+
+4. Based on the agent’s `type`, the server responds:
+
+   - **`"type": "response"`** → Plain text (just send text back).
+   - **`"type": "based"`** → Create a brand-new `.based` file in the DB, respond with `{"action": "agent_response", ...}` containing the new file’s content.
+   - **`"type": "diff"`** → Apply the diff to the existing `.based` file, add a new version, respond with the updated content.
+
+#### Example **Agent** response (plain text):
+
+```json
+// The server just sends text directly:
+"Here is a summary of the PDF..."
+```
+
+or, wrapped:
+
+```json
+{
+  "role": "assistant",
+  "type": "text",
+  "content": "Here is a summary of the PDF..."
+}
+```
+
+---
+
+### 3.4. `"revert_version"`
+
+**Handled by** `revert_version.py` → `handle_revert_version(...)`.
+
+#### Request
+
+```json
+{
+  "action": "revert_version",
+  "version_id": "abc123-uuid",
+  "filename": "myCode.based"
+}
+```
+
+#### Server Steps
+
+1. Finds the target `ChatFileVersion`.
+2. Creates a new version with that old content as the new latest version.
+3. Updates conversation or returns a final message indicating the revert result.
+
+#### Response
+
+```json
+{
+  "action": "revert_complete",
+  "message": {
+    "role": "assistant",
+    "type": "file",
+    "content": {
+      "based_filename": "myCode.based",
+      "based_content": "... the old content ...",
+      "message": "Reverted to version abc123-uuid; new version is xyz456-uuid"
+    }
+  }
+}
+```
+
+---
+
+## 4. Unknown Actions
+
+When `"action"` is present but not recognized:
+
+```json
+{
+  "action": "some_unhandled_action"
+}
+```
+
+the server sends:
+
+```json
+{
+  "error": "Unknown action: some_unhandled_action"
+}
+```
+
+---
+
+## 5. Disconnection & Persistence
+
+When the **WebSocket disconnects**:
+
+- **`ws_disconnect.py`** → `persist_on_disconnect(...)` runs:
+  1. Takes the in-memory conversation messages and inserts them into the `ChatConversation` table.
+  2. Commits the DB transaction.
+  3. Closes the WebSocket.
+
+Thus, any newly added messages not yet in the DB are saved before the connection is fully terminated.
+
