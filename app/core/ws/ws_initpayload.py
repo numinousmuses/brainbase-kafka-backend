@@ -155,6 +155,7 @@ def build_initial_payload(db: Session, chat_id: str) -> dict:
     # 6) Build a WsInitialPayload object
     payload_obj = WsInitialPayload(
         chat_id=str(chat.id),
+        chat_name=chat.name,
         conversation=conversation_objs,
         chat_files_text=chat_files_text_objs,
         chat_files_based=chat_files_based_objs,

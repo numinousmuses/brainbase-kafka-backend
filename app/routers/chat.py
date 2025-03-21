@@ -3,10 +3,15 @@ import uuid
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Form, HTTPException
 from sqlalchemy.orm import Session
+from typing import List, Optional
 
 from app.core.database import get_db
 from app.models.chat import Chat
+from app.models.file import File as FileModel  # Import file model
+from app.models.chat_file import ChatFile
 from app.schemas.chat import ChatNewResponse
+
+
 import uuid
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
@@ -18,14 +23,17 @@ def create_chat(
     user_id: str = Form(...),
     workspace_id: str = Form(...),
     chat_name: str = Form(...),
+    # Accept a list of file ids as an optional form field.
+    selected_file_ids: Optional[List[str]] = Form(None),
     db: Session = Depends(get_db)
 ):
     """
-    Create a new chat with the provided chat name, user ID, and workspace ID.
+    Create a new chat with the provided chat name, user ID, workspace ID, and optionally selected file IDs.
     
     - **user_id**: The ID of the user creating the chat.
     - **workspace_id**: The ID of the workspace where the chat belongs.
     - **chat_name**: The desired name for the new chat.
+    - **selected_file_ids**: (Optional) A list of file IDs to be added to this chat.
     
     The `last_updated` field is initialized to the current UTC timestamp.
     
@@ -46,6 +54,23 @@ def create_chat(
     )
     
     db.add(new_chat)
+    
+    # If any file IDs are provided, associate each with the chat.
+    if selected_file_ids:
+        for file_id in selected_file_ids:
+            file_record = db.query(FileModel).filter(FileModel.id == file_id, FileModel.workspace_id == workspace_id).first()
+            if file_record:
+                # Create a ChatFile record using the same file id, filename, and path.
+                new_chat_file = ChatFile(
+                    id=file_id,
+                    filename=file_record.filename,
+                    path=file_record.path,
+                    chat_id=chat_id
+                )
+                db.add(new_chat_file)
+            else:
+                raise HTTPException(status_code=404, detail=f"File {file_id} not found in the workspace.")
+    
     db.commit()
     db.refresh(new_chat)
     

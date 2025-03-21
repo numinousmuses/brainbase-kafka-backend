@@ -31,6 +31,7 @@ class WorkspaceFile(BaseModel):
 
 class WsInitialPayload(BaseModel):
     chat_id: str
+    chat_name: str
     conversation: List[ChatMessage]
     chat_files_text: List[ChatFileText]
     chat_files_based: List[ChatFileBased]
