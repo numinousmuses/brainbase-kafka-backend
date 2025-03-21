@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 import PyPDF2
 from pydantic import model_dump
 
-from schemas.ws import (
+from app.schemas.ws import (
     WsInitialPayload,
     ChatMessage,
     ChatFileText,

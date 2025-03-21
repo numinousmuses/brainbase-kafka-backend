@@ -5,9 +5,8 @@ import json
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 import PyPDF2
-from pydantic import model_dump
 
-from schemas.ws import (
+from app.schemas.ws import (
     WsInitialPayload,
     ChatMessage,
     ChatFileText,
@@ -165,7 +164,7 @@ def build_initial_payload(db: Session, chat_id: str) -> dict:
     )
 
     # 7) Create final JSON via model_dump
-    data_to_send = model_dump(payload_obj)
+    data_to_send = payload_obj.model_dump()
 
     return {
         "chat": chat,  # So the router can keep a reference if needed

@@ -211,7 +211,7 @@ ws://localhost:8000/ws/{chat_id}
 
 ---
 
-### 6. Conclusion
+### 6. Organization
 
 Your **FastAPI** backend is organized into modular parts:
 

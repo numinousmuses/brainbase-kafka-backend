@@ -1,5 +1,5 @@
 from fastapi import WebSocket
-from schemas.ws import ChatMessage
+from app.schemas.ws import ChatMessage
 
 
 async def handle_plain_text(raw_data: str, conversation_objs: list, websocket: WebSocket):

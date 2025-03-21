@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 
 from app.models.chat_conversation import ChatConversation
-from schemas.ws import ChatMessage
+from app.schemas.ws import ChatMessage
 
 async def persist_on_disconnect(
     db: Session, 

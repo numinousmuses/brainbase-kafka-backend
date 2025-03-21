@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from fastapi import WebSocket
 from sqlalchemy.orm import Session
 
-from schemas.ws import ChatMessage
+from app.schemas.ws import ChatMessage
 from app.models.model import Model as ModelModel
 from app.models.chat import Chat
 from app.models.chat_file import ChatFile

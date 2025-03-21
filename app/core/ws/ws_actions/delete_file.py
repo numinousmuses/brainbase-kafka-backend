@@ -4,7 +4,7 @@ import os
 from fastapi import WebSocket
 from sqlalchemy.orm import Session
 
-from schemas.ws import ChatMessage
+from app.schemas.ws import ChatMessage
 from app.models.chat_file import ChatFile
 from app.models.file import File as FileModel
 from app.models.chat import Chat

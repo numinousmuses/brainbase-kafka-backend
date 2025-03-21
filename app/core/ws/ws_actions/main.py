@@ -2,7 +2,7 @@ import json
 from fastapi import WebSocket
 from sqlalchemy.orm import Session
 
-from schemas.ws import ChatMessage
+from app.schemas.ws import ChatMessage
 from app.models.chat import Chat
 
 # Import our sub-handlers from within the same package
