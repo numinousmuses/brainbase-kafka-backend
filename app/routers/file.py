@@ -20,7 +20,6 @@ os.makedirs(UPLOAD_DIRECTORY, exist_ok=True)
 
 @router.post("/upload", response_model=FileUploadResponse)
 async def upload_file(
-    user_id: str = Form(...),
     target_id: str = Form(...),
     is_chat: bool = Form(...),
     files: Optional[List[UploadFile]] = File(None),
