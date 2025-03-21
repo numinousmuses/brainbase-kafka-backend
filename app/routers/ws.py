@@ -556,4 +556,36 @@ async def chat_ws(websocket: WebSocket, chat_id: str):
                 await websocket.send_text(response_text)
 
     except WebSocketDisconnect:
+        # 1) Save the conversation messages in `conversation_objs` to the DB
+        #    (or just the newly added ones if you prefer a difference approach).
+
+        for msg in conversation_objs:
+            # If we've already stored this message in the DB, skip it.
+            # Otherwise, create a new ChatConversation row.
+            # You can track "already stored" with an attribute or a separate list for new messages only.
+            
+            # Example approach: if the message doesn't have a DB ID, it's new.
+            # We'll do a naive approach here: store everything again that hasn't been stored,
+            # but in practice you might keep track of them with a "new vs. existing" marker.
+            
+            # 2) Build a ChatConversation row
+            new_chat_convo = ChatConversation(
+                id=str(uuid.uuid4()),
+                chat_id=chat_id,
+                role=msg.role,
+                type=msg.type,
+                content=(
+                    # if content is a dict or object, convert to JSON string
+                    json.dumps(msg.content) if isinstance(msg.content, dict) else str(msg.content)
+                )
+            )
+            db.add(new_chat_convo)
+
+        # 3) Commit changes
+        db.commit()
+
+        # 4) (Optionally) close the DB session
+        db.close()
         
+        # 5) Close the websocket connection gracefully (optional in a Disconnect block)
+        await websocket.close()
