@@ -3,7 +3,7 @@ import os
 import uuid
 import json
 import base64
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, HTTPException
 from sqlalchemy.orm import Session
 import PyPDF2
@@ -243,41 +243,103 @@ async def chat_ws(websocket: WebSocket, chat_id: str):
                     model_ak = model_obj.ak
                     model_base_url = model_obj.base_url
 
-                    # Separate out the selected based file and the rest
-                    selected_based_file = None
-                    other_based_files = []
-                    for bf in chat_files_based_objs:
-                        if selected_filename and bf.name == selected_filename:
-                            selected_based_file = bf.dict()  # Convert pydantic to dict
+                    # Identify the selected .based file, if any, and the "other" based files
+                    selected_based_file_obj = None
+                    other_based_files_dict = []
+                    for bf_obj in chat_files_based_objs:
+                        if selected_filename and bf_obj.name == selected_filename:
+                            selected_based_file_obj = bf_obj
                         else:
-                            other_based_files.append(bf.dict())
+                            other_based_files_dict.append(bf_obj.dict())
 
-                    if selected_based_file is None:
-                        other_based_files = [bf.dict() for bf in chat_files_based_objs]
+                    # If no file was explicitly selected, we treat all as 'other'
+                    if not selected_based_file_obj:
+                        other_based_files_dict = [bf_obj.dict() for bf_obj in chat_files_based_objs]
 
+                    # Convert selected .based file to dict if found
+                    selected_based_file_dict = selected_based_file_obj.dict() if selected_based_file_obj else None
+
+                    # Call handle_new_message
                     result = handle_new_message(
-                        model_name, 
-                        model_ak, 
-                        model_base_url, 
-                        selected_filename, 
-                        selected_based_file,  # dict
-                        prompt, 
-                        is_first_prompt, 
-                        is_chat_or_composer, 
-                        [cm.dict() for cm in conversation_objs], 
-                        [cft.dict() for cft in chat_files_text_objs], 
-                        other_based_files
+                        model_name,
+                        model_ak,
+                        model_base_url,
+                        selected_filename,
+                        selected_based_file_dict,
+                        prompt,
+                        is_first_prompt,
+                        is_chat_or_composer,
+                        [cm.dict() for cm in conversation_objs],   # conversation
+                        [cft.dict() for cft in chat_files_text_objs],
+                        other_based_files_dict
                     )
 
-                    # Process result
-                    if result["type"] in ["based", "diff"]:
-                        based_filename = result.get("based_filename", "unknown.based")
+                    ### Process the agent result
+                    if result["type"] == "response":
+                        #
+                        # 1) Plain text response:
+                        #    - Add to conversation
+                        #    - Update chat.last_updated
+                        #    - Return updated messages to frontend
+                        #
+                        agent_response = {
+                            "role": "assistant",
+                            "type": "text",
+                            "content": result.get("message", result["output"])
+                        }
+                        new_messages.append(agent_response)
+                        conversation_objs.append(
+                            ChatMessage(role="assistant", type="text", content=agent_response["content"])
+                        )
+                        # Update chat.last_updated
+                        chat.last_updated = datetime.utcnow().isoformat()
+                        db.commit()
+
+                        # Return the plain text to the client
+                        await websocket.send_text(agent_response["content"])
+
+                    elif result["type"] == "based":
+                        #
+                        # 2) A brand-new Based file was generated
+                        #    - Create a new ChatFile for it (if not existing)
+                        #    - Create the first ChatFileVersion with 'output' as content
+                        #    - Update chat.last_updated
+                        #    - Return updated chat files to the frontend
+                        #
+                        based_filename = result.get("based_filename", "new_based_file.based")
+                        file_content = result["output"]
+
+                        # 2a) Create a new ChatFile record for the .based file
+                        new_based_file_id = str(uuid.uuid4())
+                        new_chat_file = ChatFile(
+                            id=new_based_file_id,
+                            filename=based_filename,
+                            path="(in-memory)",  # or a real path if needed
+                            chat_id=chat.id
+                        )
+                        db.add(new_chat_file)
+
+                        # 2b) Create an initial ChatFileVersion
+                        new_version_id = str(uuid.uuid4())
+                        new_chat_file_version = ChatFileVersion(
+                            id=new_version_id,
+                            chat_file_id=new_based_file_id,
+                            timestamp=datetime.utcnow().isoformat(),
+                            content=file_content
+                        )
+                        db.add(new_chat_file_version)
+                        
+                        # Update chat.last_updated
+                        chat.last_updated = datetime.utcnow().isoformat()
+                        db.commit()
+
+                        # 2c) Send a response to the frontend with the new file
                         agent_response = {
                             "role": "assistant",
                             "type": "file",
                             "content": {
                                 "based_filename": based_filename,
-                                "based_content": result["output"]
+                                "based_content": file_content
                             }
                         }
                         new_messages.append(agent_response)
@@ -287,28 +349,112 @@ async def chat_ws(websocket: WebSocket, chat_id: str):
                                 type="file",
                                 content=json.dumps({
                                     "based_filename": based_filename,
-                                    "based_content": result["output"]
+                                    "based_content": file_content
                                 })
                             )
                         )
                         await websocket.send_json({"action": "agent_response", "message": agent_response})
-                    elif result["type"] == "response":
+
+                    elif result["type"] == "diff":
+                        #
+                        # 3) We have a unified diff for an existing .based file
+                        #    - Apply the diff to the existing latest content
+                        #    - Create a new ChatFileVersion as the new "latest" version
+                        #    - Update all older versions' diffs accordingly
+                        #    - Update chat.last_updated
+                        #    - Return updated chat files to the frontend
+                        #
+                        if not selected_based_file_obj:
+                            await websocket.send_json({"error": "No selected .based file to apply diff."})
+                            continue
+
+                        diff_text = result["output"]
+                        # 3a) Find the corresponding ChatFile record in DB
+                        chat_file_id = selected_based_file_obj.file_id
+                        existing_chat_file = db.query(ChatFile).filter(ChatFile.id == chat_file_id).first()
+                        if not existing_chat_file:
+                            await websocket.send_json({"error": f"ChatFile not found for id={chat_file_id}"})
+                            continue
+
+                        # 3b) Get the latest version content
+                        latest_version_db = (
+                            db.query(ChatFileVersion)
+                            .filter(ChatFileVersion.chat_file_id == chat_file_id)
+                            .order_by(ChatFileVersion.timestamp.desc())
+                            .first()
+                        )
+                        if not latest_version_db:
+                            await websocket.send_json({"error": "No existing version found for this .based file."})
+                            continue
+                        
+                        old_content = latest_version_db.content
+                        
+                        # 3c) Apply diff locally
+                        try:
+                            import app.core.unifieddiff as ud
+                            new_content = ud.apply_patch(old_content, diff_text)
+                        except Exception as e:
+                            await websocket.send_json({"error": f"Applying diff failed: {str(e)}"})
+                            continue
+
+                        # 3d) Create a new version with new content
+                        new_version_id = str(uuid.uuid4())
+                        new_version = ChatFileVersion(
+                            id=new_version_id,
+                            chat_file_id=chat_file_id,
+                            timestamp=datetime.utcnow().isoformat(),
+                            content=new_content
+                        )
+                        db.add(new_version)
+                        
+                        # 3e) Recompute diffs for older versions relative to this new version.
+                        # We store them in memory so we can return them to the frontend, but we do
+                        # NOT persist them to the DB (your schema has no column for storing these).
+                        older_diffs = []
+                        all_versions = (
+                            db.query(ChatFileVersion)
+                            .filter(ChatFileVersion.chat_file_id == chat_file_id)
+                            .order_by(ChatFileVersion.timestamp)
+                            .all()
+                        )
+
+                        for ver in all_versions:
+                            if ver.id != new_version.id:
+                                patch_diff = ud.make_patch(ver.content, new_version.content)
+                                older_diffs.append({
+                                    "version_id": ver.id,
+                                    "diff": patch_diff
+                                })
+
+                        # 3f) Update chat.last_updated
+                        chat.last_updated = datetime.now(timezone.utc).isoformat()
+                        db.commit()
+
+                        # 3g) Return an agent response
                         agent_response = {
                             "role": "assistant",
-                            "type": "text",
-                            "content": result.get("message", result["output"])
+                            "type": "file",
+                            "content": {
+                                "based_filename": selected_based_file_obj.name,
+                                "based_content": new_content
+                            }
                         }
                         new_messages.append(agent_response)
                         conversation_objs.append(
                             ChatMessage(
                                 role="assistant",
-                                type="text",
-                                content=agent_response["content"]
+                                type="file",
+                                content=json.dumps({
+                                    "based_filename": selected_based_file_obj.name,
+                                    "based_content": diff_text,
+                                })
                             )
                         )
-                        await websocket.send_text(agent_response["content"])
+                        await websocket.send_json({"action": "agent_response", "message": agent_response})
                     else:
+                        # Unknown type
                         await websocket.send_json({"error": "Unknown response type from agent."})
+
                 else:
                     await websocket.send_json({"error": "Unknown action."})
             else:
