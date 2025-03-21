@@ -7,11 +7,17 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, HTTPException
 from sqlalchemy.orm import Session
 import PyPDF2
-from schemas.ws import WsInitialPayload, ChatMessage, ChatFileText, ChatFileBased, WorkspaceFile
 
-# Import our diff functions from unifieddiff.py
+from schemas.ws import (
+    WsInitialPayload,
+    ChatMessage,
+    ChatFileText,
+    ChatFileBased,
+    ChatFileBasedVersion,
+    WorkspaceFile
+)
+
 import app.core.unifieddiff as unifieddiff
-
 from app.core.database import get_db
 from app.models.chat import Chat
 from app.models.chat_file import ChatFile
@@ -27,45 +33,40 @@ router = APIRouter()
 async def chat_ws(websocket: WebSocket, chat_id: str):
     await websocket.accept()
 
-    # Acquire a database session.
     db: Session = next(get_db())
 
-    # Load the chat.
     chat = db.query(Chat).filter(Chat.id == chat_id).first()
     if not chat:
         await websocket.send_json({"error": "Chat not found."})
         await websocket.close()
         return
 
-    # Load existing conversation messages.
-    conversation = []
+    # Convert DB conversation -> List[ChatMessage]
+    conversation_objs = []
     if chat.conversation:
         for msg in chat.conversation:
-            conversation.append({
-                "role": msg.role,
-                "type": msg.type,
-                "content": msg.content
-            })
+            conversation_objs.append(
+                ChatMessage(
+                    role=msg.role,
+                    type=msg.type,
+                    content=msg.content
+                )
+            )
 
-    # Load files attached to this chat.
+    # Load and partition chat files
     chat_files = db.query(ChatFile).filter(ChatFile.chat_id == chat_id).all()
 
-    # Partition chat files into non-based and based files.
-    chat_files_text = []    # Non-based files (text or images)
-    chat_files_based = []   # Files with extension .based
-
-    # For non-based files, also extract text if possible.
     parsed_files = {}
     for file in chat_files:
         fname = file.filename.lower()
-        if fname.endswith('.txt'):
+        if fname.endswith(".txt"):
             try:
                 with open(file.path, "r", encoding="utf-8") as f:
                     parsed_text = f.read()
             except Exception:
                 parsed_text = ""
             parsed_files[file.id] = parsed_text
-        elif fname.endswith('.pdf'):
+        elif fname.endswith(".pdf"):
             try:
                 with open(file.path, "rb") as f:
                     reader = PyPDF2.PdfReader(f)
@@ -78,81 +79,95 @@ async def chat_ws(websocket: WebSocket, chat_id: str):
                 parsed_text = "[Error parsing PDF]"
             parsed_files[file.id] = parsed_text
 
-    # Partition files.
+    chat_files_text_objs = []
+    chat_files_based_objs = []
+
     for file in chat_files:
-        ext = file.filename.lower().rsplit('.', 1)[-1]
+        ext = file.filename.lower().rsplit(".", 1)[-1]
         if ext == "based":
-            # For each .based file, load its version history.
-            versions = db.query(ChatFileVersion).filter(
-                ChatFileVersion.chat_file_id == file.id
-            ).order_by(ChatFileVersion.timestamp).all()
+            versions = (
+                db.query(ChatFileVersion)
+                .filter(ChatFileVersion.chat_file_id == file.id)
+                .order_by(ChatFileVersion.timestamp)
+                .all()
+            )
             if versions:
                 latest_version = versions[-1]
-                versions_data = []
-                # For each version, compute diff from that version to latest.
+                version_objs = []
                 for ver in versions:
                     diff_patch = ""
                     if ver.id != latest_version.id:
                         diff_patch = unifieddiff.make_patch(ver.content, latest_version.content)
-                    versions_data.append({
-                        "version_id": ver.id,
-                        "timestamp": ver.timestamp,
-                        "diff": diff_patch
-                    })
+                    version_objs.append(
+                        ChatFileBasedVersion(
+                            version_id=ver.id,
+                            timestamp=str(ver.timestamp),
+                            diff=diff_patch
+                        )
+                    )
+                latest_content = latest_version.content
             else:
-                latest_version = None
-                versions_data = []
-            chat_files_based.append({
-                "file_id": file.id,
-                "name": file.filename,
-                "latest_content": latest_version.content if latest_version else "",
-                "versions": versions_data,
-                "type": "based"
-            })
+                version_objs = []
+                latest_content = ""
+
+            chat_files_based_objs.append(
+                ChatFileBased(
+                    file_id=file.id,
+                    name=file.filename,
+                    latest_content=latest_content,
+                    versions=version_objs,
+                    type="based"
+                )
+            )
         else:
-            # For non-based files, decide type.
             if ext in ["jpg", "jpeg", "png", "gif"]:
                 file_type = "image"
-                content = file.path  # Client can load image from URL/path.
+                content = file.path
             else:
                 file_type = "text"
                 content = parsed_files.get(file.id, "")
-            chat_files_text.append({
-                "file_id": file.id,
-                "name": file.filename,
-                "content": content,
-                "type": file_type
-            })
 
-    # Load workspace files that are not attached to this chat and are not .based.
+            chat_files_text_objs.append(
+                ChatFileText(
+                    file_id=file.id,
+                    name=file.filename,
+                    content=content,
+                    type=file_type
+                )
+            )
+
+    # Workspace files not attached to this chat & not .based
     workspace_files_all = db.query(FileModel).filter(FileModel.workspace_id == chat.workspace_id).all()
     chat_file_ids = set(cf.id for cf in chat_files)
-    workspace_files_not_in_chat = []
+    workspace_files_objs = []
     for wf in workspace_files_all:
-        if wf.id not in chat_file_ids:
-            if not wf.filename.lower().endswith('.based'):
-                workspace_files_not_in_chat.append({
-                    "file_id": wf.id,
-                    "name": wf.filename
-                })
+        if wf.id not in chat_file_ids and not wf.filename.lower().endswith(".based"):
+            workspace_files_objs.append(
+                WorkspaceFile(
+                    file_id=wf.id,
+                    name=wf.filename
+                )
+            )
 
-    # Load AI model configurations (for models belonging to the chat's user).
+    # Load model names
     models_query = db.query(ModelModel).filter(ModelModel.user_id == chat.user_id).all()
-    model_names = [model.name for model in models_query]
+    model_names = [m.name for m in models_query]
 
-    # Build the initial payload.
-    initial_payload = {
-        "chat_id": chat_id,
-        "conversation": conversation,
-        "chat_files_text": chat_files_text,
-        "chat_files_based": chat_files_based,
-        "workspace_files": workspace_files_not_in_chat,
-        "workspace_id": chat.workspace_id,
-        "models": model_names
-    }
-    await websocket.send_json(initial_payload)
+    # Construct typed WsInitialPayload
+    initial_payload_obj = WsInitialPayload(
+        chat_id=str(chat_id),
+        conversation=conversation_objs,
+        chat_files_text=chat_files_text_objs,
+        chat_files_based=chat_files_based_objs,
+        workspace_files=workspace_files_objs,
+        workspace_id=str(chat.workspace_id),
+        models=model_names
+    )
+    # Send the typed payload as JSON
+    await websocket.send_json(initial_payload_obj.dict())
 
-    # List to hold new messages for later persistence.
+    # We'll keep new_messages as a list of dict, 
+    # but it could also be a list of ChatMessage objects if desired.
     new_messages = []
 
     try:
@@ -163,7 +178,6 @@ async def chat_ws(websocket: WebSocket, chat_id: str):
             except Exception:
                 message_data = None
 
-            # Handle JSON messages with specific actions.
             if message_data and "action" in message_data:
                 action = message_data["action"]
                 if action == "upload_file":
@@ -214,18 +228,14 @@ async def chat_ws(websocket: WebSocket, chat_id: str):
                         }
                     }
                     new_messages.append(file_message)
-                    conversation.append(file_message)
                     await websocket.send_json({"action": "file_uploaded", "message": file_message})
                 elif action == "new_message":
-                    # Expected keys: model, prompt, is_first_prompt, is_chat_or_composer, selected_filename
                     model_name = message_data.get("model", "default_model")
                     prompt = message_data.get("prompt", "")
                     is_first_prompt = message_data.get("is_first_prompt", False)
                     is_chat_or_composer = message_data.get("is_chat_or_composer", False)
-                    # Extract the selected filename for the based file (if any)
                     selected_filename = message_data.get("selected_filename", None)
-                    
-                    # Look up the model in the db and get its ak and base_url.
+
                     model_obj = db.query(ModelModel).filter(ModelModel.name == model_name).first()
                     if not model_obj:
                         await websocket.send_json({"error": "Model not found."})
@@ -233,83 +243,106 @@ async def chat_ws(websocket: WebSocket, chat_id: str):
                     model_ak = model_obj.ak
                     model_base_url = model_obj.base_url
 
-                    # Separate out the selected based file and the rest of the based files.
+                    # Separate out the selected based file and the rest
                     selected_based_file = None
                     other_based_files = []
-                    for bf in chat_files_based:
-                        if selected_filename and bf["name"] == selected_filename:
-                            selected_based_file = bf
+                    for bf in chat_files_based_objs:
+                        if selected_filename and bf.name == selected_filename:
+                            selected_based_file = bf.dict()  # Convert pydantic to dict
                         else:
-                            other_based_files.append(bf)
-                    # If no file was explicitly selected, then treat all based files as "other".
+                            other_based_files.append(bf.dict())
+
                     if selected_based_file is None:
-                        other_based_files = chat_files_based
+                        other_based_files = [bf.dict() for bf in chat_files_based_objs]
 
-                    # Call the agent handler with the model ak and base url.
-                    
+                    result = handle_new_message(
+                        model_name, 
+                        model_ak, 
+                        model_base_url, 
+                        selected_filename, 
+                        selected_based_file,  # dict
+                        prompt, 
+                        is_first_prompt, 
+                        is_chat_or_composer, 
+                        [cm.dict() for cm in conversation_objs], 
+                        [cft.dict() for cft in chat_files_text_objs], 
+                        other_based_files
+                    )
 
-                    result = handle_new_message(model_name, model_ak, model_base_url, selected_filename, selected_based_file, prompt, is_first_prompt, is_chat_or_composer, conversation, chat_files_text, other_based_files)
-                    
-                    # Process result based on its type.
+                    # Process result
                     if result["type"] in ["based", "diff"]:
-                        # For based responses, the agent returns a based filename.
                         based_filename = result.get("based_filename", "unknown.based")
-                        # If first prompt or if this is a new based file, create a new chat file entry.
-                        # Otherwise, update the version history (here we simulate by returning a diff).
                         agent_response = {
                             "role": "assistant",
-                            "type": "file",  # Representing a based file response.
+                            "type": "file",
                             "content": {
                                 "based_filename": based_filename,
                                 "based_content": result["output"]
                             }
                         }
                         new_messages.append(agent_response)
-                        conversation.append(agent_response)
+                        conversation_objs.append(
+                            ChatMessage(
+                                role="assistant",
+                                type="file",
+                                content=json.dumps({
+                                    "based_filename": based_filename,
+                                    "based_content": result["output"]
+                                })
+                            )
+                        )
                         await websocket.send_json({"action": "agent_response", "message": agent_response})
                     elif result["type"] == "response":
-                        # Plain text response.
                         agent_response = {
                             "role": "assistant",
                             "type": "text",
                             "content": result.get("message", result["output"])
                         }
                         new_messages.append(agent_response)
-                        conversation.append(agent_response)
-                        await websocket.send_text(result.get("message", result["output"]))
+                        conversation_objs.append(
+                            ChatMessage(
+                                role="assistant",
+                                type="text",
+                                content=agent_response["content"]
+                            )
+                        )
+                        await websocket.send_text(agent_response["content"])
                     else:
                         await websocket.send_json({"error": "Unknown response type from agent."})
                 else:
                     await websocket.send_json({"error": "Unknown action."})
             else:
                 # Treat as a plain text chat message.
-                user_message = {
-                    "role": "user",
-                    "type": "text",
-                    "content": raw_data
-                }
-                new_messages.append(user_message)
-                conversation.append(user_message)
+                user_message = ChatMessage(
+                    role="user",
+                    type="text",
+                    content=raw_data
+                )
+                new_messages.append(user_message.dict())
+                conversation_objs.append(user_message)
 
-                # Generate an echo response (to be replaced with actual LLM generation later).
                 response_text = f"Echo: {raw_data}"
-                assistant_message = {
-                    "role": "assistant",
-                    "type": "text",
-                    "content": response_text
-                }
-                new_messages.append(assistant_message)
-                conversation.append(assistant_message)
+                assistant_message = ChatMessage(
+                    role="assistant",
+                    type="text",
+                    content=response_text
+                )
+                new_messages.append(assistant_message.dict())
+                conversation_objs.append(assistant_message)
                 await websocket.send_text(response_text)
+
     except WebSocketDisconnect:
-        # On disconnect, persist new messages to the database.
-        for msg in new_messages:
+        # Persist new_messages to DB
+        for msg_dict in new_messages:
+            role = msg_dict["role"]
+            msg_type = msg_dict["type"]
+            content = json.dumps(msg_dict["content"]) if isinstance(msg_dict["content"], dict) else str(msg_dict["content"])
             new_msg = ChatConversation(
                 id=str(uuid.uuid4()),
                 chat_id=chat_id,
-                role=msg["role"],
-                type=msg["type"],
-                content=str(msg["content"])
+                role=role,
+                type=msg_type,
+                content=content
             )
             db.add(new_msg)
         db.commit()
