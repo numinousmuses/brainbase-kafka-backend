@@ -1,5 +1,6 @@
 # app/core/basedagent.py
 from openai import OpenAI
+from tokencost import count_message_tokens, count_string_tokens
 
 def handle_new_message(model: str, prompt: str, is_first_prompt: bool, is_chat_or_composer: bool, conversation: list, chat_files_text: list):
     """
@@ -55,6 +56,9 @@ def prompt_llm_json_output(
     """
     Calls a chat completions API (compatible with OpenRouter/OpenAI) to generate a JSON-based response.
     
+    Before sending the conversation, it counts the tokens using tokencost. If the total exceeds 128000 tokens,
+    it removes the oldest messages (starting from the fourth message onward) until the count is below the limit.
+    
     Parameters:
       - conversation: A list of messages in the format:
             [
@@ -75,15 +79,16 @@ def prompt_llm_json_output(
     
     Returns:
       A dictionary representing the parsed JSON response message from the LLM.
-      
-    Example usage:
-      >>> conv = [
-      ...     {"role": "system", "content": "You are a helpful assistant."},
-      ...     {"role": "user", "content": "What is the meaning of life?"}
-      ... ]
-      >>> response = prompt_llm_json_output(conv, api_key="YOUR_API_KEY", base_url="https://openrouter.ai/api/v1")
-      >>> print(response)
     """
+    # Ensure conversation token count is below the threshold.
+    token_limit = 128000
+    token_count = count_message_tokens(conversation, model=model)
+    # Remove oldest messages after the first three until under limit.
+    while token_count > token_limit and len(conversation) > 3:
+        # Remove the fourth message (index 3)
+        conversation.pop(3)
+        token_count = count_message_tokens(conversation, model=model)
+    
     # Initialize the OpenAI client.
     client = OpenAI(
         base_url=base_url,
