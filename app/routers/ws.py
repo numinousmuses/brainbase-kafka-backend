@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, HTTPException
 from sqlalchemy.orm import Session
 import PyPDF2
+from pydantic import model_dump
 
 from schemas.ws import (
     WsInitialPayload,
@@ -164,11 +165,8 @@ async def chat_ws(websocket: WebSocket, chat_id: str):
         models=model_names
     )
     # Send the typed payload as JSON
-    await websocket.send_json(initial_payload_obj.dict())
+    await websocket.send_json(model_dump(initial_payload_obj))
 
-    # We'll keep new_messages as a list of dict, 
-    # but it could also be a list of ChatMessage objects if desired.
-    new_messages = []
 
     try:
         while True:
@@ -218,7 +216,7 @@ async def chat_ws(websocket: WebSocket, chat_id: str):
                         db.add(new_file)
                     db.commit()
 
-                    file_message = {
+                    file_message = ChatMessage({
                         "role": "user",
                         "type": "file",
                         "content": {
@@ -226,8 +224,8 @@ async def chat_ws(websocket: WebSocket, chat_id: str):
                             "filename": filename,
                             "path": file_path
                         }
-                    }
-                    new_messages.append(file_message)
+                    })
+                    conversation_objs.append(file_message)
                     await websocket.send_json({"action": "file_uploaded", "message": file_message})
                 elif action == "new_message":
                     model_name = message_data.get("model", "default_model")
@@ -235,6 +233,15 @@ async def chat_ws(websocket: WebSocket, chat_id: str):
                     is_first_prompt = message_data.get("is_first_prompt", False)
                     is_chat_or_composer = message_data.get("is_chat_or_composer", False)
                     selected_filename = message_data.get("selected_filename", None)
+
+                    # add the user message to the conversation
+
+                    user_message = ChatMessage(
+                        role="user",
+                        type="text",
+                        content=prompt
+                    )
+                    conversation_objs.append(user_message)
 
                     model_obj = db.query(ModelModel).filter(ModelModel.name == model_name).first()
                     if not model_obj:
@@ -287,10 +294,8 @@ async def chat_ws(websocket: WebSocket, chat_id: str):
                             "type": "text",
                             "content": result.get("message", result["output"])
                         }
-                        new_messages.append(agent_response)
-                        conversation_objs.append(
-                            ChatMessage(role="assistant", type="text", content=agent_response["content"])
-                        )
+                        conversation_objs.append(ChatMessage(agent_response))
+
                         # Update chat.last_updated
                         chat.last_updated = datetime.now(timezone.utc).isoformat()
                         db.commit()
@@ -342,7 +347,6 @@ async def chat_ws(websocket: WebSocket, chat_id: str):
                                 "based_content": file_content
                             }
                         }
-                        new_messages.append(agent_response)
 
                         new_convo_block = ChatMessage(
                                 role="assistant",
@@ -439,7 +443,7 @@ async def chat_ws(websocket: WebSocket, chat_id: str):
                                 "based_content": new_content
                             }
                         }
-                        new_messages.append(agent_response)
+
                         conversation_objs.append(
                             ChatMessage(
                                 role="assistant",
@@ -454,6 +458,80 @@ async def chat_ws(websocket: WebSocket, chat_id: str):
                     else:
                         # Unknown type
                         await websocket.send_json({"error": "Unknown response type from agent."})
+                elif action == "revert_version":
+                    """
+                    The frontend should send, at minimum:
+                    {
+                        "action": "revert_version",
+                        "version_id": "...",
+                        "filename": "...",  # The .based file name or ID
+                    }
+                    This endpoint will:
+                    1. Look up the chosen ChatFileVersion by version_id.
+                    2. Create a new ChatFileVersion with the same content, making it the new latest version.
+                    3. Update chat.last_updated.
+                    4. Return an 'agent_response' indicating success, along with the new version's content.
+                    """
+                    version_id = message_data.get("version_id")
+                    filename = message_data.get("filename")
+                    if not version_id or not filename:
+                        await websocket.send_json({"error": "Missing version_id or filename for revert_version."})
+                        continue
+
+                    # 1) Find the older version record
+                    old_version = db.query(ChatFileVersion).filter(ChatFileVersion.id == version_id).first()
+                    if not old_version:
+                        await websocket.send_json({"error": f"No version found for version_id={version_id}"})
+                        continue
+                    
+                    # 2) Find the corresponding ChatFile by filename or ID (depending on your usage)
+                    #    If you are using the .based file 'name' to identify it:
+                    chat_file = db.query(ChatFile).filter(ChatFile.filename == filename).first()
+                    #    Alternatively, if you have a 'file_id' from the client, filter by ChatFile.id == file_id
+                    
+                    if not chat_file:
+                        await websocket.send_json({"error": f"No .based file found for filename={filename}"})
+                        continue
+
+                    # 3) Create a new ChatFileVersion referencing old_version.content
+                    new_version_id = str(uuid.uuid4())
+                    revert_version = ChatFileVersion(
+                        id=new_version_id,
+                        chat_file_id=chat_file.id,
+                        timestamp=datetime.now(timezone.utc).isoformat(),
+                        content=old_version.content
+                    )
+                    db.add(revert_version)
+                    
+                    # 4) Update chat.last_updated
+                    chat.last_updated = datetime.now(timezone.utc).isoformat()
+                    db.commit()
+
+                    # 5) Return updated .based file info to the frontend
+                    agent_response = {
+                        "role": "assistant",
+                        "type": "file",
+                        "content": {
+                            "based_filename": chat_file.filename,
+                            "based_content": old_version.content,
+                            "message": f"Reverted to version {version_id}; new version is {new_version_id}"
+                        }
+                    }
+
+                    # If you'd like to log this in the conversation, you can do so:
+                    conversation_objs.append(
+                        ChatMessage(
+                            role="assistant",
+                            type="file",
+                            content=json.dumps({
+                                "based_filename": chat_file.filename,
+                                "based_content": old_version.content,
+                                "revert_notice": f"Reverted from version {version_id}"
+                            })
+                        )
+                    )
+                    
+                    await websocket.send_json({"action": "revert_complete", "message": agent_response})
 
                 else:
                     await websocket.send_json({"error": "Unknown action."})
@@ -464,7 +542,7 @@ async def chat_ws(websocket: WebSocket, chat_id: str):
                     type="text",
                     content=raw_data
                 )
-                new_messages.append(user_message.dict())
+
                 conversation_objs.append(user_message)
 
                 response_text = f"Echo: {raw_data}"
@@ -473,22 +551,9 @@ async def chat_ws(websocket: WebSocket, chat_id: str):
                     type="text",
                     content=response_text
                 )
-                new_messages.append(assistant_message.dict())
+
                 conversation_objs.append(assistant_message)
                 await websocket.send_text(response_text)
 
     except WebSocketDisconnect:
-        # Persist new_messages to DB
-        for msg_dict in new_messages:
-            role = msg_dict["role"]
-            msg_type = msg_dict["type"]
-            content = json.dumps(msg_dict["content"]) if isinstance(msg_dict["content"], dict) else str(msg_dict["content"])
-            new_msg = ChatConversation(
-                id=str(uuid.uuid4()),
-                chat_id=chat_id,
-                role=role,
-                type=msg_type,
-                content=content
-            )
-            db.add(new_msg)
-        db.commit()
+        
