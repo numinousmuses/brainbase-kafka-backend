@@ -8,6 +8,225 @@ Methods
 * HTTP Requests
 * Websockets
 
+---
+
+# Brief Docs
+
+- **Project Layout** (file structure and purpose),
+- **How to Install & Run**,
+- **Available Routers & Endpoints**,
+- **Where to Find** key modules (database, WebSocket, etc.).
+
+---
+
+## 1. Project Layout
+
+Project structure:
+
+```
+app/
+├── core/
+│   ├── basedagent/
+│   │   ├── __init__.py
+│   │   ├── llm.py
+│   │   ├── main.py
+│   │   ├── triage.py
+│   │   └── validation.py
+│   ├── ws/
+│   │   ├── ws_actions/
+│   │   │   ├── __init__.py
+│   │   │   ├── delete_file.py
+│   │   │   ├── main.py
+│   │   │   ├── new_message_action.py
+│   │   │   ├── plain_text.py
+│   │   │   ├── revert_version.py
+│   │   │   └── upload_file.py
+│   │   ├── ws_disconnect.py
+│   │   └── ws_initpayload.py
+│   ├── config.py
+│   ├── database.py
+│   └── unifieddiff.py
+├── models/
+│   ├── base.py
+│   ├── chat.py
+│   ├── chat_conversation.py
+│   ├── chat_file.py
+│   ├── chat_file_version.py
+│   ├── file.py
+│   ├── model.py
+│   ├── user.py
+│   └── workspace.py
+├── routers/
+│   ├── auth.py
+│   ├── chat.py
+│   ├── file.py
+│   ├── model.py
+│   ├── workspace.py
+│   └── ws_router.py
+├── schemas/
+│   ├── auth.py
+│   ├── basedagent.py
+│   ├── chat.py
+│   ├── file.py
+│   ├── model.py
+│   ├── workspace.py
+│   └── ws.py
+├── main.py
+├── requirements.txt
+└── README.md
+```
+
+### Key Directories & Files
+
+- **`app/main.py`**  
+  Primary FastAPI application entry point. It creates a `FastAPI()` instance, registers routers, sets up CORS, and initializes the database.
+
+- **`app/core/`**  
+  General backend “core” modules:
+  - `database.py` sets up SQLAlchemy + session management.
+  - `config.py` might hold environment configuration or global settings.
+  - `unifieddiff.py` and `basedagent/` are specialized logic modules for generating or applying diffs, working with “.based” files, or prompting an LLM.
+
+- **`app/core/ws/`**  
+  WebSocket–specific code.  
+  - **`ws_actions/`** contains action handlers (`upload_file.py`, `new_message_action.py`, `delete_file.py`, etc.).  
+  - `ws_disconnect.py` handles cleanup/persistence on socket disconnect.  
+  - `ws_initpayload.py` builds the initial payload for a WebSocket client.
+
+- **`app/models/`**  
+  SQLAlchemy ORM models (`Chat`, `ChatFile`, `File`, `User`, etc.).
+
+- **`app/routers/`**  
+  FastAPI router modules for REST endpoints (`auth.py`, `workspace.py`, `chat.py`, etc.) plus the `ws_router.py` that configures the WebSocket path.
+
+- **`app/schemas/`**  
+  Pydantic models for request/response validation.
+
+- **`requirements.txt`**  
+  Lists Python dependencies needed to run the app.
+
+---
+
+## 2. How to Install & Run
+
+1. **Create & activate a virtual environment** (optional but recommended):
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # Linux/Mac
+   # or venv\Scripts\activate on Windows
+   ```
+
+2. **Install requirements**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. **Run the API** (development):
+   ```bash
+   uvicorn app.main:app --reload
+   ```
+   - `app.main:app` references the `app` object created inside `app/main.py`.
+   - `--reload` restarts the server whenever you edit files.
+
+4. **Check logs**:  
+   You should see something like:
+   ```
+   INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+   ```
+
+5. **Open** `http://localhost:8000/docs` in your browser to see the **Swagger** UI.  
+   You can also check `http://localhost:8000/redoc` for ReDoc-based docs.
+
+---
+
+## 3. Routers & Endpoints
+
+### 3.1. Registered Routers
+
+In **`app/main.py`**:
+```python
+app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
+app.include_router(workspace.router, prefix="/workspace", tags=["Workspace"])
+app.include_router(chat.router, prefix="/chat", tags=["Chat"])
+app.include_router(file.router, prefix="/file", tags=["File"])
+app.include_router(model.router, prefix="/models", tags=["Model"])
+app.include_router(ws_router.router, prefix="/ws", tags=["WebSocket"])
+```
+
+That means:
+
+- **`/auth/*`** → endpoints for authentication (login, signup, etc.).
+- **`/workspace/*`** → endpoints for workspace management.
+- **`/chat/*`** → endpoints for chat creation, retrieval, etc.
+- **`/file/*`** → endpoints for file upload/download (non-WebSocket).
+- **`/models/*`** → endpoints for listing/managing LLM or model configs.
+- **`/ws/*`** → **WebSocket** paths for real-time chat sessions (e.g., `ws://.../ws/{chat_id}`).
+
+### 3.2. Automatic OpenAPI Documentation
+
+FastAPI automatically **generates** OpenAPI specs from your router endpoints. You can see them in **Swagger** by browsing to:
+
+```
+GET http://localhost:8000/docs
+```
+
+(when the server is running).
+
+---
+
+## 4. WebSocket Communication
+
+Your WebSocket routes live in **`ws_router.py`**. A typical client connects to:
+
+```
+ws://localhost:8000/ws/{chat_id}
+```
+
+- On connect, the server loads the chat’s data (conversation, files) and sends an **initial payload**.
+- The client can send JSON messages with an `"action"` key to perform certain tasks (upload files, create new messages, revert versions, delete files, etc.) or send plain text for normal chat.
+- On disconnect, the server writes unsaved messages to the database.
+
+*(See the “WebSocket Docs” you have for more detail about the structure of messages and responses.)*
+
+---
+
+## 5. Additional Notes
+
+- **Database Initialization**:  
+  `init_db()` is called in `app/main.py`, ensuring your `models/` are set up. If you need migrations, you might integrate **Alembic** or a similar tool.
+
+- **Configurable**:  
+  CORS origins, database URLs, or environment variables can typically be set via `app/core/config.py`.
+
+- **Deployment**:  
+  For production, you’d run something like:
+  ```bash
+  uvicorn app.main:app --host 0.0.0.0 --port 8000
+  ```
+  or use **gunicorn** with **uvicorn workers**:
+  ```bash
+  gunicorn app.main:app -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000
+  ```
+  Don’t forget to update `allow_origins` in your CORS settings for the domains you use in production.
+
+---
+
+### 6. Conclusion
+
+Your **FastAPI** backend is organized into modular parts:
+
+- **`main.py`** to create the app and tie together all routers.  
+- **`core/`** for database access and any specialized logic (WebSocket helpers, LLM-based code generation, etc.).  
+- **`models/`** for SQLAlchemy ORM definitions.  
+- **`routers/`** for REST endpoints (plus the WebSocket “router”).  
+- **`schemas/`** for pydantic models ensuring typed request/response data.
+
+Starting it is as simple as installing dependencies, running **uvicorn**, and then viewing endpoints or docs in the browser. Use the WebSocket flow for interactive chat or file manipulation; use the standard REST endpoints for authentication, file listing, or retrieving chat data.
+
+---
+
+# Database Schema
+
 Below is a **visual/table-based** overview of the database schema.
 
 ---

@@ -2,21 +2,25 @@
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-
 from app.models.base import Base
-from app.core.config import DATABASE_URL  # If you're storing DB URL in config.py
+from app.core.config import DATABASE_URL
 
-# Create the engine (for SQLite, we need 'check_same_thread=False' for multithreading)
 engine = create_engine(
     DATABASE_URL,
-    connect_args={"check_same_thread": False}  # Only needed for SQLite
+    connect_args={"check_same_thread": False}  # only needed for SQLite
 )
-
-# Create a configured "SessionLocal" class
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def init_db() -> None:
-    """
-    Initialize the database by creating all tables (if they don't already exist).
-    """
     Base.metadata.create_all(bind=engine)
+
+# ADD THIS:
+def get_db():
+    """
+    Yields a database session for FastAPI dependencies.
+    """
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
