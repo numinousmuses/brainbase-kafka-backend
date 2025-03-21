@@ -6,7 +6,7 @@ from uuid import uuid4
 from app.core.database import get_db
 from app.models.user import User
 from app.models.workspace import Workspace
-from app.schemas.auth import AuthRequest, AuthResponse, WorkspaceResponse, WorkspaceChat
+from app.schemas.auth import AuthRequest, AuthResponse, WorkspaceResponse, WorkspaceChat, WorkspaceFile
 
 router = APIRouter()
 
@@ -16,7 +16,7 @@ def auth(payload: AuthRequest, db: Session = Depends(get_db)):
     Receives an email, checks if the user exists.
     If not, creates the user (and a default workspace).
     Returns the user's info along with all their workspaces,
-    including chat summaries for each workspace.
+    including file and chat summaries for each workspace.
     """
     # 1. Check if the user exists
     user = db.query(User).filter(User.email == payload.email).first()
@@ -41,24 +41,29 @@ def auth(payload: AuthRequest, db: Session = Depends(get_db)):
     workspace_responses = []
 
     for workspace in workspaces:
-        chat_summaries = []
-        # Use the relationship from Workspace to Chat
+        # Build list of files for this workspace
+        file_list = []
+        for file in workspace.files:
+            file_list.append(WorkspaceFile(
+                id=file.id,
+                filename=file.filename
+            ))
+
+        # Build list of chats for this workspace
+        chat_list = []
         for chat in workspace.chats:
-            # Compute the total number of versions for .based files in this chat
-            num_versions = sum(len(chat_file.versions) for chat_file in chat.chat_files)
-            chat_summary = WorkspaceChat(
+            chat_list.append(WorkspaceChat(
                 id=chat.id,
                 name=chat.name,
-                last_updated=chat.last_updated,
-                num_versions=num_versions
-            )
-            chat_summaries.append(chat_summary)
+                last_updated=chat.last_updated
+            ))
         
         workspace_responses.append(
             WorkspaceResponse(
                 id=workspace.id,
                 name=workspace.name,
-                chats=chat_summaries
+                files=file_list,
+                chats=chat_list
             )
         )
 

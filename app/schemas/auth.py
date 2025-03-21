@@ -2,15 +2,19 @@
 from pydantic import BaseModel, EmailStr
 from typing import List, Optional
 
+class WorkspaceFile(BaseModel):
+    id: str
+    filename: str
+
 class WorkspaceChat(BaseModel):
     id: str
     name: str
     last_updated: Optional[str] = None
-    num_versions: int
 
 class WorkspaceResponse(BaseModel):
     id: str
     name: str
+    files: List[WorkspaceFile] = []
     chats: List[WorkspaceChat] = []
 
 class AuthRequest(BaseModel):
