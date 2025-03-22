@@ -51,6 +51,9 @@ def build_initial_payload(db: Session, chat_id: str) -> dict:
                 )
             )
 
+    print("=== Loading chat files... ===")
+    print(conversation_objs)
+
     # 3) Load and partition chat files
     chat_files = db.query(ChatFile).filter(ChatFile.chat_id == chat.id).all()
 

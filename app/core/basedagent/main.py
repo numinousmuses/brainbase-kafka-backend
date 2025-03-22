@@ -31,6 +31,21 @@ def handle_new_message(
       - Optionally "message" if type is "response"
     """
 
+    print('=== handle_new_message ===')
+    print({
+        "model": model,
+        "model_ak": model_ak,
+        "model_base_url": model_base_url,
+        "selected_filename": selected_filename,
+        "selected_based_file": selected_based_file,
+        "prompt": prompt,
+        "is_first_prompt": is_first_prompt,
+        "is_chat_or_composer": is_chat_or_composer,
+        "conversation": conversation,
+        "chat_files_text": chat_files_text,
+        "other_based_files": other_based_files
+    })
+
     # 1) Triage the context
     triage_result = triageContext(
         selected_based_file=selected_based_file,
@@ -52,7 +67,6 @@ def handle_new_message(
             "{ \"type\": \"response\", \"text\": <string> }."
         )
         generation_prompt = (
-            f"BASED_GUIDE:\n{BASED_GUIDE}\n\n"
             f"Context summary:\n{triage_result.get('summary', '')}\n\n"
             f"Extracted context:\n{triage_result.get('extracted_context', '')}\n\n"
             f"Files list:\n{', '.join(triage_result.get('files_list', []))}\n\n"
@@ -70,6 +84,8 @@ def handle_new_message(
             base_url=model_base_url,
             api_key=model_ak
         )
+
+
         generated_text = generation_response.get("text") or generation_response.get("output")
         return {
             "type": "response",

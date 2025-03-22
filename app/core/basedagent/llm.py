@@ -1,5 +1,4 @@
 from openai import OpenAI
-from tokencost import count_message_tokens
 
 def prompt_llm_json_output(
     conversation: list,
@@ -17,12 +16,12 @@ def prompt_llm_json_output(
     
     Returns a dictionary representing the parsed JSON response message from the LLM.
     """
-    token_limit = 128000
-    token_count = count_message_tokens(conversation, model=model)
-    # Remove oldest messages after the first three until under limit.
-    while token_count > token_limit and len(conversation) > 3:
-        conversation.pop(3)
-        token_count = count_message_tokens(conversation, model=model)
+    # token_limit = 128000
+    # token_count = count_message_tokens(conversation, model=model)
+    # # Remove oldest messages after the first three until under limit.
+    # while token_count > token_limit and len(conversation) > 3:
+    #     conversation.pop(3)
+    #     token_count = count_message_tokens(conversation, model=model)
 
     # Initialize the OpenAI client.
     client = OpenAI(
@@ -40,11 +39,19 @@ def prompt_llm_json_output(
 
     # Create the chat completion
     completion = client.chat.completions.create(**req_params)
+
+    # print("completion:", completion)
     
     # Extract the response message from the completion
     if not completion.choices:
         return {"error": "No completion choices returned from LLM."}
     response_message = completion.choices[0].message
+
+    # print()
+    # print("response_format:", response_format)
+    # print("response_message:", response_message)
+
+
     
     # If the response is an object with to_dict(), convert to a dict
     if hasattr(response_message, "to_dict"):

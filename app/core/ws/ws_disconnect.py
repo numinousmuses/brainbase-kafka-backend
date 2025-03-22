@@ -25,20 +25,20 @@ async def persist_on_disconnect(
     """
 
     # 1) Convert in-memory conversation messages → DB rows
-    for msg in conversation_objs:
-        # If you track which messages are 'new' vs. 'existing', you could skip stored ones.
-        # This example stores everything again. In practice, you might store only new messages.
-        db_message = ChatConversation(
-            id=str(uuid.uuid4()),
-            chat_id=chat_id,
-            role=msg.role,
-            type=msg.type,
-            content=(
-                # If content is a dict, store JSON; else store as string
-                json.dumps(msg.content) if isinstance(msg.content, dict) else str(msg.content)
-            )
-        )
-        db.add(db_message)
+    # for msg in conversation_objs:
+    #     # If you track which messages are 'new' vs. 'existing', you could skip stored ones.
+    #     # This example stores everything again. In practice, you might store only new messages.
+    #     db_message = ChatConversation(
+    #         id=str(uuid.uuid4()),
+    #         chat_id=chat_id,
+    #         role=msg.role,
+    #         type=msg.type,
+    #         content=(
+    #             # If content is a dict, store JSON; else store as string
+    #             json.dumps(msg.content) if isinstance(msg.content, dict) else str(msg.content)
+    #         )
+    #     )
+    #     db.add(db_message)
 
     # 2) Commit changes
     db.commit()

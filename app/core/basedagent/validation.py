@@ -9,9 +9,13 @@ def validate_based_code(code: str) -> dict:
     Expects a JSON response with "status" and, on success, "converted_code".
     """
     payload = {"code": code}
+    print("=== validate_based_code ===")
+    print(payload)
     try:
         r = requests.post(VALIDATION_ENDPOINT, json=payload, timeout=10)
         result = r.json()
+        print("=== validate_based_code ===")
+        print(result)
         return result
     except Exception as e:
         return {"status": "error", "error": str(e)}
