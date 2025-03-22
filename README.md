@@ -1,5 +1,25 @@
 # Kafka Backend
 
+✅ Milestone 1: Agent can write simple Based code and can iterate to fix errors
+
+✅ Milestone 2: Agent can write Based code diffs to modify the existing code and can iterate to fix errors
+
+✅ Milestone 3: Agent can now run on a websocket
+
+✅ Milestone 4: Client that can interact with the agent over websocket
+
+---
+
+# Demo
+
+There is a demo deployed, but it's very slow due to free tier rate limit. For a faster experience you can clone the [frontend](https://github.com/numinousmuses/brainbase-poc) and [backend](https://github.com/numinousmuses/brainbase-kafka-backend) repos then spin up the backend with the steps noted in section 2 of the brief docs below, then spin up the frontend with npm run dev.
+
+Deployed backend: https://brainbase-kafka-backend.onrender.com/
+
+Deployed frontend
+
+---
+
 Stack
 * FastAPI
 * SQLite

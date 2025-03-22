@@ -279,6 +279,8 @@ def _generate_based_diff(
     Helper for handle_new_message: generate a diff to update an existing .based file.
     Uses a more flexible approach to diff validation.
     """
+    print("\n\n\n\n\n\nSelected based file")
+    print(selected_based_file)
     current_based_content = selected_based_file.get("latest_content", "")
 
     # Build a clearer system prompt with examples

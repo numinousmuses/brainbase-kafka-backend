@@ -74,6 +74,8 @@ def triageContext(
         f"Other based files:\n{formatted_other_based}\n\n"
         f"{selected_info}\n\n"
         "Based on this context, produce a JSON output with the following keys:\n"
+        "genNewFile should only be true if generating a new file from SCRATCH, if editing a file, a diff needs to be made, so genNewFile must be FALSE\n"
+        "plain_response must be a boolean representing whether a simple chat response is to be made, or a Based file or diff needs to be generated. if the latter two, plain_response MUST be false\n"
         " - summary\n - extraction_indices\n - genNewFile\n - files_list\n - plain_response\n\n"
         "Return only valid JSON."
     )

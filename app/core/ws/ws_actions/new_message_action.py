@@ -80,6 +80,10 @@ async def handle_new_message_action(
             other_based_files_dict.append(bf_obj)
             print("   -> Adding to other_based_files_dict:", bf_obj.get("name"))
 
+
+    print("\n\n\n\n\n\n\n\n\nSelected based file obj:", selected_based_file_obj)
+    print("\n\n\n\n\n\n\n")
+
     # If no file was explicitly selected, treat all as 'other'
     if not selected_based_file_obj:
         print("No selected based file found. Using all based files as other_based_files_dict.")
