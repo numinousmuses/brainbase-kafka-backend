@@ -8,6 +8,7 @@ from app.schemas.ws import ChatMessage
 from app.models.chat_file import ChatFile
 from app.models.file import File as FileModel
 from app.models.chat import Chat
+import json
 
 async def handle_delete_file(
     db: Session,
@@ -66,10 +67,7 @@ async def handle_delete_file(
     deletion_message = ChatMessage(
         role="system",
         type="file",
-        content={
-            "deleted_file_id": file_id,
-            "filename": chat_file.filename
-        }
+        content=f"""{chat_file.filename} was deleted."""
     )
     conversation_objs.append(deletion_message)
 

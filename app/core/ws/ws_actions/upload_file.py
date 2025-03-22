@@ -69,11 +69,7 @@ async def handle_upload_file(
     file_message = ChatMessage(
         role="user",
         type="file",
-        content={
-            "file_id": file_id,
-            "filename": filename,
-            "path": file_path
-        }
+        content=f"""Uploaded {filename} to workspace."""
     )
     conversation_objs.append(file_message)
     await websocket.send_json({"action": "file_uploaded", "message": file_message})
