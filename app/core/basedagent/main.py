@@ -3,7 +3,7 @@ from datetime import datetime
 from app.core.config import BASED_GUIDE, UNIFIED_DIFF, VALIDATION_FUNCTION
 import app.core.unifieddiff as unifieddiff
 import json
-
+import json_repair
 # Import from our local package modules
 from .validation import validate_based_code, validate_based_diff
 from .llm import prompt_llm_json_output
@@ -63,9 +63,10 @@ def handle_new_message(
 
     # 2) If plain response or not composer, just return text
     if plain_response_requested or not is_chat_or_composer:
+        print('returning plain response')
         json_format_instructions = (
             "Return a JSON object in the following format: "
-            "{ \"type\": \"response\", \"text\": <string> }."
+            "{ \"text\": <string> }."
         )
         generation_prompt = (
             f"Context summary:\n{triage_result.get('summary', '')}\n\n"
@@ -87,7 +88,11 @@ def handle_new_message(
         )
 
 
-        generated_text = generation_response.get("text") or generation_response.get("output")
+        generated_text = generation_response.get("content")
+
+        generated_text_obj = json_repair.loads(generated_text)
+        generated_text = generated_text_obj.get("text")
+         
         return {
             "type": "response",
             "message": generated_text
@@ -289,7 +294,7 @@ def _generate_based_diff(
         
         # Parse the JSON to extract the "text" parameter
         try:
-            generated_diff_obj = json.loads(generated_diff)
+            generated_diff_obj = json_repair.loads(generated_diff)
             generated_diff = generated_diff_obj.get("text")
             if not generated_diff:
                 raise ValueError("Missing 'text' field in JSON response")

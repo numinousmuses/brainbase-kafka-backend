@@ -20,6 +20,7 @@ httptools==0.6.4
 httpx==0.28.1
 idna==3.10
 jiter==0.9.0
+json_repair==0.40.0
 multidict==6.2.0
 numpy==2.2.4
 openai==1.68.0

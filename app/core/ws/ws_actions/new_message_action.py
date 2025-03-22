@@ -127,7 +127,7 @@ async def handle_new_message_action(
         agent_response = {
             "role": "assistant",
             "type": "text",
-            "content": result.get("message", result["output"])
+            "content": result["message"]
         }
         print("Agent response constructed:", agent_response)
         conversation_objs.append(ChatMessage(**agent_response))
