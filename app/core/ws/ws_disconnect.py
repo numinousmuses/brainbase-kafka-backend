@@ -1,4 +1,3 @@
-# app/routers/ws_disconnect.py
 import json
 import uuid
 from fastapi import WebSocket
@@ -23,28 +22,65 @@ async def persist_on_disconnect(
     :param conversation_objs: A list of ChatMessage objects (in-memory)
     :param websocket: The active WebSocket connection
     """
-
-    # 1) Convert in-memory conversation messages → DB rows
-    # for msg in conversation_objs:
-    #     # If you track which messages are 'new' vs. 'existing', you could skip stored ones.
-    #     # This example stores everything again. In practice, you might store only new messages.
-    #     db_message = ChatConversation(
-    #         id=str(uuid.uuid4()),
-    #         chat_id=chat_id,
-    #         role=msg.role,
-    #         type=msg.type,
-    #         content=(
-    #             # If content is a dict, store JSON; else store as string
-    #             json.dumps(msg.content) if isinstance(msg.content, dict) else str(msg.content)
-    #         )
-    #     )
-    #     db.add(db_message)
-
-    # 2) Commit changes
-    db.commit()
-
-    # 3) Optionally close the DB session
-    db.close()
-
-    # 4) Close the websocket
-    await websocket.close()
+    try:
+        print(f"=== Persisting conversation for chat {chat_id} on disconnect ===")
+        
+        # 1) Delete existing conversations to avoid duplication
+        print(f"Deleting existing conversation records for chat_id={chat_id}")
+        db.query(ChatConversation).filter(ChatConversation.chat_id == chat_id).delete()
+        
+        # 2) Convert in-memory conversation messages to DB rows
+        print(f"Converting {len(conversation_objs)} in-memory messages to DB records")
+        for index, msg in enumerate(conversation_objs):
+            # Extract fields properly depending on whether msg is a dict or object
+            if hasattr(msg, 'role'):
+                # It's an object with attributes
+                role = msg.role
+                content_type = msg.type
+                content = msg.content
+            else:
+                # It's a dictionary
+                role = msg.get('role')
+                content_type = msg.get('type')
+                content = msg.get('content')
+                
+            # Serialize content if needed
+            if isinstance(content, dict):
+                serialized_content = json.dumps(content)
+            else:
+                serialized_content = content
+                
+            # Create the DB record
+            db_message = ChatConversation(
+                id=str(uuid.uuid4()),
+                chat_id=chat_id,
+                role=role,
+                type=content_type,
+                content=serialized_content,
+                position=index  # Add position to maintain order
+            )
+            db.add(db_message)
+            print(f"Added message {index+1}/{len(conversation_objs)}: role={role}, type={content_type}")
+        
+        # 3) Commit changes
+        db.commit()
+        print("Successfully committed conversation to database")
+        
+        # 4) Close the DB session
+        db.close()
+        print("Closed database session")
+        
+    except Exception as e:
+        print(f"ERROR during conversation persistence: {str(e)}")
+        # Try to rollback if there was an error
+        try:
+            db.rollback()
+        except:
+            pass
+    finally:
+        # 5) Close the websocket
+        try:
+            print("Closing WebSocket connection")
+            await websocket.close()
+        except Exception as e:
+            print(f"Error closing websocket: {str(e)}")

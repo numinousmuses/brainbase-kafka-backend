@@ -124,13 +124,13 @@ async def handle_new_message_action(
     if result["type"] == "response":
         print("Processing 'response' type result")
         # Plain text response from agent
-        agent_response = {
-            "role": "assistant",
-            "type": "text",
-            "content": result["message"]
-        }
+        agent_response = ChatMessage(
+            role="assistant",
+            type="text",
+            content=result["message"]
+        )
         print("Agent response constructed:", agent_response)
-        conversation_objs.append(ChatMessage(**agent_response))
+        conversation_objs.append(agent_response)
         print("Appended agent response to conversation_objs.")
 
         # Update chat.last_updated
@@ -140,8 +140,8 @@ async def handle_new_message_action(
         print("DB commit successful.")
 
         # Return text to client
-        print("Sending text response to websocket:", agent_response["content"])
-        await websocket.send_text(agent_response["content"])
+        print("Sending text response to websocket:", agent_response.content)
+        await websocket.send_text(agent_response.content)
 
     elif result["type"] == "based":
         print("Processing 'based' type result")
@@ -187,13 +187,15 @@ async def handle_new_message_action(
         db.commit()
         print("DB commit successful.")
 
+        file_content_response = {
+            "based_filename": based_filename,
+            "based_content": file_content
+        }
+
         agent_response = {
             "role": "assistant",
             "type": "file",
-            "content": {
-                "based_filename": based_filename,
-                "based_content": file_content
-            }
+            "content": file_content_response
         }
         print("Constructed agent_response for 'based' type:", agent_response)
 
@@ -201,10 +203,7 @@ async def handle_new_message_action(
         new_convo_block = ChatMessage(
             role="assistant",
             type="file",
-            content=json.dumps({
-                "based_filename": based_filename,
-                "based_content": file_content
-            })
+            content=json.dumps(file_content_response)
         )
         conversation_objs.append(new_convo_block)
         print("Appended new conversation block for based file:", new_convo_block)
@@ -304,27 +303,28 @@ async def handle_new_message_action(
         db.commit()
         print("DB commit successful after diff update.")
 
+        file_content_response = {
+            # Access name using key indexing
+            "based_filename": selected_based_file_obj.get("name"),
+            "based_content": new_content
+        }
+
         agent_response = {
             "role": "assistant",
             "type": "file",
-            "content": {
-                # Access name using key indexing
-                "based_filename": selected_based_file_obj.get("name"),
-                "based_content": new_content
-            }
+            "content": file_content_response
         }
         print("Constructed agent_response for diff type:", agent_response)
 
-        conversation_objs.append(
-            ChatMessage(
-                role="assistant",
-                type="file",
-                content=json.dumps({
-                    "based_filename": selected_based_file_obj.get("name"),
-                    "based_content": diff_text
-                })
-            )
+        diff_response = ChatMessage(
+            role="assistant",
+            type="file",
+            content=json.dumps({
+                "based_filename": selected_based_file_obj.get("name"),
+                "based_content": diff_text
+            })
         )
+        conversation_objs.append(diff_response)
         print("Appended conversation block with diff details.")
         await websocket.send_json({"action": "agent_response", "message": agent_response})
         print("Sent JSON response for 'diff' type over websocket.")
