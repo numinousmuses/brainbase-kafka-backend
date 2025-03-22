@@ -180,8 +180,8 @@ def _generate_whole_based_file(
         generated_output = generation_response.get("content")
 
         generated_output_obj = json_repair.loads(generated_output)
-        generated_output = generated_output_obj.get("text")
-        new_file_name = generated_output_obj.get("filename")
+        generated_output = generated_output_obj["text"]
+        new_file_name = generated_output_obj["filename"]
 
         validation_result = validate_based_code(generated_output)
         if validation_result.get("status") == "success":
@@ -318,7 +318,7 @@ def _generate_based_diff(
         # Parse the JSON to extract the "text" parameter
         try:
             generated_diff_obj = json_repair.loads(generated_diff)
-            generated_diff = generated_diff_obj.get("text")
+            generated_diff = generated_diff_obj["text"]
             if not generated_diff:
                 raise ValueError("Missing 'text' field in JSON response")
             print("\n\n\n\n\n\n\nSuccessfully parsed diff\n\n\n\n\n\n\n")
