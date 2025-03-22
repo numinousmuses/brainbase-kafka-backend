@@ -57,7 +57,6 @@ async def persist_on_disconnect(
                 role=role,
                 type=content_type,
                 content=serialized_content,
-                position=index  # Add position to maintain order
             )
             db.add(db_message)
             print(f"Added message {index+1}/{len(conversation_objs)}: role={role}, type={content_type}")

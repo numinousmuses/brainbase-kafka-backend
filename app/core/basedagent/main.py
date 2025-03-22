@@ -58,6 +58,14 @@ def handle_new_message(
         model_ak=model_ak,
         model_base_url=model_base_url
     )
+
+    print('\n\n\n\n\n\n\n\n\n\ntriage_result')
+    print(triage_result)
+    print('\n\n\n\n\n\n\n\n\n')
+
+    triage_result = triage_result["content"]
+    triage_result = json_repair.loads(triage_result)
+    
     gen_new_file = triage_result.get("genNewFile", is_first_prompt)
     plain_response_requested = triage_result.get("plain_response", False)
 
@@ -102,6 +110,7 @@ def handle_new_message(
 
     # 3) Otherwise, we’re generating or updating Based code
     if is_first_prompt or gen_new_file:
+        print("=== _generate_whole_based_file ===")
         # Generate a brand-new Based file
         return _generate_whole_based_file(
             model, model_ak, model_base_url,
