@@ -161,7 +161,8 @@ def build_initial_payload(db: Session, chat_id: str) -> dict:
         chat_files_based=chat_files_based_objs,
         workspace_files=workspace_files_objs,
         workspace_id=str(chat.workspace_id),
-        models=model_names
+        models=model_names,
+        initial=True
     )
 
     # 7) Create final JSON via model_dump

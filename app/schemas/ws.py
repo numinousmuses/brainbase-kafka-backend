@@ -38,3 +38,4 @@ class WsInitialPayload(BaseModel):
     workspace_files: List[WorkspaceFile]
     workspace_id: str
     models: List[str]
+    initial: bool
