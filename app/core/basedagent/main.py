@@ -3,7 +3,6 @@ from datetime import datetime
 from app.core.config import BASED_GUIDE, UNIFIED_DIFF, VALIDATION_FUNCTION
 import app.core.unifieddiff as unifieddiff
 import json
-import json_repair
 # Import from our local package modules
 from .validation import validate_based_code, validate_based_diff
 from .llm import prompt_llm_json_output
@@ -48,32 +47,43 @@ def handle_new_message(
     })
 
     # 1) Triage the context
-    triage_result = triageContext(
-        selected_based_file=selected_based_file,
-        prompt=prompt,
-        conversation=conversation,
-        chat_files_text=chat_files_text,
-        other_based_files=other_based_files,
-        model=model,
-        model_ak=model_ak,
-        model_base_url=model_base_url
-    )
+    max_attempts = 5
+    attempt = 0
+    triage_result = None
 
+    while attempt < max_attempts:
+        try:
+            triage_response = triageContext(
+                selected_based_file=selected_based_file,
+                prompt=prompt,
+                conversation=conversation,
+                chat_files_text=chat_files_text,
+                other_based_files=other_based_files,
+                model=model,
+                model_ak=model_ak,
+                model_base_url=model_base_url
+            )
+            
+            content = triage_response["content"]
+            triage_result = json.loads(content)
+            # Successfully parsed the JSON
+            break
+        except json.JSONDecodeError as e:
+            # Handle JSON parsing error by retrying
+            print(f"JSON parsing error (attempt {attempt+1}): {str(e)}")
+            attempt += 1
+            if attempt >= max_attempts:
+                return {
+                    "type": "response",
+                    "message": f"Error: Failed to process request after {max_attempts} attempts due to JSON parsing issues."
+                }
     
-
-    triage_result = triage_result["content"]
-    triage_result = json_repair.loads(triage_result)
-
     print('\n\n\n\n\n\n\n\n\n\ntriage_result')
     print(triage_result)
     print('\n\n\n\n\n\n\n\n\n')
 
-    
-
     gen_new_file = triage_result["genNewFile"]
     plain_response_requested = triage_result["plain_response"]
-
-    
 
     if is_first_prompt or gen_new_file:
         print("=== _generate_whole_based_file ===")
@@ -104,24 +114,47 @@ def handle_new_message(
             {"role": "system", "content": generation_prompt},
             {"role": "user", "content": "Generate plain text response."}
         ]
-        generation_response = prompt_llm_json_output(
-            conversation=llm_conversation,
-            model=model,
-            base_url=model_base_url,
-            api_key=model_ak
-        )
+        
+        max_attempts = 5
+        attempt = 0
+        generated_text = None
+        
+        while attempt < max_attempts:
+            try:
+                generation_response = prompt_llm_json_output(
+                    conversation=llm_conversation,
+                    model=model,
+                    base_url=model_base_url,
+                    api_key=model_ak
+                )
+                
+                content = generation_response.get("content")
+                generated_text_obj = json.loads(content)
+                generated_text = generated_text_obj.get("text")
+                # Successfully parsed the JSON
+                break
+            except json.JSONDecodeError as e:
+                # Handle JSON parsing error by retrying with updated prompt
+                print(f"JSON parsing error (attempt {attempt+1}): {str(e)}")
+                llm_conversation[0]["content"] += (
+                    f"\n\nYour previous response could not be parsed as JSON. "
+                    f"Please ensure you return a valid JSON object exactly in this format: {{\"text\": \"your response here\"}}."
+                )
+                attempt += 1
+                if attempt >= max_attempts:
+                    return {
+                        "type": "response",
+                        "message": f"Error: Failed to generate a valid response after {max_attempts} attempts due to JSON parsing issues."
+                    }
 
-
-        generated_text = generation_response.get("content")
-
-        generated_text_obj = json_repair.loads(generated_text)
-        generated_text = generated_text_obj.get("text")
+        print("\n\n\n\n\n\n\n\n")
+        print(generated_text_obj)
+        print("\n\n\n\n\n\n\n\n")
          
         return {
             "type": "response",
             "message": generated_text
         }
-
     
     else:
         # Generate a diff to update an existing Based file
@@ -171,26 +204,52 @@ def _generate_whole_based_file(
     final_output = None
 
     while attempt < max_attempts:
-        generation_response = prompt_llm_json_output(
-            conversation=llm_conversation,
-            model=model,
-            base_url=model_base_url,
-            api_key=model_ak
-        )
-        generated_output = generation_response.get("content")
+        try:
+            generation_response = prompt_llm_json_output(
+                conversation=llm_conversation,
+                model=model,
+                base_url=model_base_url,
+                api_key=model_ak
+            )
+            
+            content = generation_response.get("content")
+            generated_output_obj = json.loads(content)
+            
+            print("\n\n\n\n\n\n\n\n\n")
+            print("Generated output object:")
+            print(generated_output_obj)
+            print("\n\n\n\n\n\n\n\n\n")
+            
+            generated_output = generated_output_obj.get("text")
+            new_file_name = generated_output_obj.get("filename")
 
-        generated_output_obj = json_repair.loads(generated_output)
-        generated_output = generated_output_obj["text"]
-        new_file_name = generated_output_obj["filename"]
+            print("New file name", new_file_name)
+            print("\n\n\n\n\n\n")
+            print("New file content", generated_output)
+            print("\n\n\n\n\n\n")
 
-        validation_result = validate_based_code(generated_output)
-        if validation_result.get("status") == "success":
-            final_output = validation_result.get("converted_code", generated_output)
-            print(f"Generated valid .based file: {final_output}")
-            break
-        else:
-            error_msg = validation_result.get("error", "Unknown validation error")
-            llm_conversation[0]["content"] += f"\nValidation error: {error_msg}"
+            
+            if not generated_output:
+                raise ValueError("Missing 'text' field in JSON response")
+                
+            validation_result = validate_based_code(generated_output)
+            if validation_result.get("status") == "success":
+                final_output = validation_result.get("converted_code", generated_output)
+                print(f"Generated valid .based file: {final_output}")
+                break
+            else:
+                error_msg = validation_result.get("error", "Unknown validation error")
+                llm_conversation[0]["content"] += f"\nValidation error: {error_msg}"
+                attempt += 1
+                
+        except (json.JSONDecodeError, ValueError) as e:
+            # Handle JSON parsing error by retrying with updated prompt
+            print(f"JSON parsing error (attempt {attempt+1}): {str(e)}")
+            llm_conversation[0]["content"] += (
+                f"\n\nYour previous response could not be parsed correctly. "
+                f"Please ensure you return a valid JSON object exactly in this format: "
+                f"{{\"type\": \"based\", \"filename\": \"example.based\", \"text\": \"your content here\"}}."
+            )
             attempt += 1
 
     if final_output is None:
@@ -203,7 +262,7 @@ def _generate_whole_based_file(
     return {
         "output": final_output,
         "type": "based",
-        "based_filename": new_file_name if new_file_name else "new_based_file.based"
+        "based_filename": new_file_name
     }
 
 
@@ -305,58 +364,66 @@ def _generate_based_diff(
     attempt = 0
     
     while attempt < max_attempts:
-        generation_response = prompt_llm_json_output(
-            conversation=llm_conversation,
-            model=model,
-            base_url=model_base_url,
-            api_key=model_ak
-        )
-        print("\n\n\n\n\n\nGenerated Diff\n\n\n\n\n\n")
-        generated_diff = generation_response.get("content")
-        # print(generated_diff)
-        
-        # Parse the JSON to extract the "text" parameter
         try:
-            generated_diff_obj = json_repair.loads(generated_diff)
-            generated_diff = generated_diff_obj["text"]
+            generation_response = prompt_llm_json_output(
+                conversation=llm_conversation,
+                model=model,
+                base_url=model_base_url,
+                api_key=model_ak
+            )
+            print("\n\n\n\n\n\nGenerated Diff\n\n\n\n\n\n")
+            
+            content = generation_response.get("content")
+            generated_diff_obj = json.loads(content)
+            
+            print("\n\n\n\n\n\n\n\n")
+            print(generated_diff_obj)
+            print("\n\n\n\n\n\n\n")
+            
+            generated_diff = generated_diff_obj.get("text")
             if not generated_diff:
                 raise ValueError("Missing 'text' field in JSON response")
-            print("\n\n\n\n\n\n\nSuccessfully parsed diff\n\n\n\n\n\n\n")
-            # print(generated_diff)
-        except Exception as e:
-            llm_conversation[0]["content"] += f"\nError parsing JSON: {str(e)}"
-            print("\n\n\n\n\n\n\nFailed to parse diff\n\n\n\n\n\n\n")
-            attempt += 1
-            continue
-
-        # Skip the strict local check, just make sure the diff can be applied
-        try:
-            new_content = unifieddiff.apply_patch(current_based_content, generated_diff)
-            print("\n\n\n\n\n\n\nSuccessfully applied local diff patch\n\n\n\n\n\n\n")
-            print("new_content:", new_content)
             
-            # External validation of the resulting content
-            validation_result = validate_based_diff(generated_diff, current_based_content)
-            print(f"\n\n\n\n\n\n\Validation result {validation_result} \n\n\n\n\n\n\n")
-            if validation_result.get("status") == "success":
-                final_diff = validation_result.get("converted_diff", generated_diff)
-                return {
-                    "output": final_diff,
-                    "type": "diff",
-                    "based_filename": selected_filename if selected_filename else "existing_based_file.based"
-                }
-            else:
-                error_msg = validation_result.get("error", "Unknown diff validation error")
-                llm_conversation[0]["content"] += f"\nDiff validation error: {error_msg}\n"
-                llm_conversation[0]["content"] += "Please try again with a simpler diff that maintains the same structure as the original file."
-                attempt += 1
+            print("\n\n\n\n\n\n\nSuccessfully parsed diff\n\n\n\n\n\n\n")
+            
+            # Skip the strict local check, just make sure the diff can be applied
+            try:
+                new_content = unifieddiff.apply_patch(current_based_content, generated_diff)
+                print("\n\n\n\n\n\n\nSuccessfully applied local diff patch\n\n\n\n\n\n\n")
+                print("new_content:", new_content)
                 
-        except Exception as e:
-            # If the diff can't be applied at all, try again
-            llm_conversation[0]["content"] += f"\nFailed to apply diff: {str(e)}\n"
-            llm_conversation[0]["content"] += "Please generate a simpler, cleaner diff that follows unified diff format."
+                # External validation of the resulting content
+                validation_result = validate_based_diff(generated_diff, current_based_content)
+                print(f"\n\n\n\n\n\n\Validation result {validation_result} \n\n\n\n\n\n\n")
+                if validation_result.get("status") == "success":
+                    final_diff = validation_result.get("converted_diff", generated_diff)
+                    return {
+                        "output": final_diff,
+                        "type": "diff",
+                        "based_filename": selected_filename if selected_filename else "existing_based_file.based"
+                    }
+                else:
+                    error_msg = validation_result.get("error", "Unknown diff validation error")
+                    llm_conversation[0]["content"] += f"\nDiff validation error: {error_msg}\n"
+                    llm_conversation[0]["content"] += "Please try again with a simpler diff that maintains the same structure as the original file."
+                    attempt += 1
+                    
+            except Exception as e:
+                # If the diff can't be applied at all, try again
+                llm_conversation[0]["content"] += f"\nFailed to apply diff: {str(e)}\n"
+                llm_conversation[0]["content"] += "Please generate a simpler, cleaner diff that follows unified diff format."
+                attempt += 1
+                continue
+                
+        except json.JSONDecodeError as e:
+            # Handle JSON parsing error
+            print(f"JSON parsing error (attempt {attempt+1}): {str(e)}")
+            llm_conversation[0]["content"] += (
+                f"\n\nYour previous response could not be parsed as JSON. "
+                f"Please ensure you return a valid JSON object exactly in this format: "
+                f"{{\"type\": \"diff\", \"filename\": \"file.based\", \"text\": \"--- file.based\\n+++ file.based\\n@@ -1,1 +1,2 @@\\n line1\\n+line2\"}}."
+            )
             attempt += 1
-            continue
 
     return {
         "output": "Error: Unable to generate a valid Based diff after multiple attempts.",
