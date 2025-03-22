@@ -148,9 +148,9 @@ async def handle_new_message_action(
         
         # Parse the output JSON string to extract the actual data
         try:
-            output_data = json.loads(result["output"])
+            output_data = result["output"]
             based_filename = result["based_filename"]
-            file_content = output_data["output"]
+            file_content = output_data
         except (json.JSONDecodeError, KeyError) as e:
             print(f"Error parsing output JSON: {e}")
             based_filename = "new_based_file.based"
