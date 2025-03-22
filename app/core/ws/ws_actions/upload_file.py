@@ -9,7 +9,7 @@ from app.schemas.ws import ChatMessage
 from app.models.chat_file import ChatFile
 from app.models.file import File as FileModel
 from app.models.chat import Chat
-
+import json
 
 async def handle_upload_file(
     db: Session,
@@ -69,7 +69,11 @@ async def handle_upload_file(
     file_message = ChatMessage(
         role="user",
         type="file",
-        content=f"""Uploaded {filename} to workspace."""
+        content=json.dumps({
+            "file_id": file_id,
+            "filename": filename,
+            "path": file_path
+        })
     )
     conversation_objs.append(file_message)
-    await websocket.send_json({"action": "file_uploaded", "message": file_message})
+    await websocket.send_json({"action": "file_uploaded", "message": file_message.dict()})
