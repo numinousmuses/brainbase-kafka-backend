@@ -40,8 +40,11 @@ async def chat_ws(websocket: WebSocket, chat_id: str):
     chat = initial_data["chat"]  # The Chat SQLAlchemy object
     conversation_objs = initial_data["conversation_objs"]  # In-memory list of ChatMessage
     # If build_initial_payload returns them, also store these:
-    chat_files_based_objs = initial_data.get("chat_files_based_objs", [])
-    chat_files_text_objs = initial_data.get("chat_files_text_objs", [])
+    chat_files_based_objs = initial_data["payload_json"].get("chat_files_based", [])
+    chat_files_text_objs = initial_data["payload_json"].get("chat_files_text", [])
+
+    # print("=== Chat files based obj in ws router ===")
+    # print(chat_files_based_objs)
 
     try:
         while True:

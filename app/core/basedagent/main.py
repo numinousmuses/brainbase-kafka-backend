@@ -1,7 +1,8 @@
 import uuid
 from datetime import datetime
-from app.core.config import BASED_GUIDE
+from app.core.config import BASED_GUIDE, UNIFIED_DIFF, VALIDATION_FUNCTION
 import app.core.unifieddiff as unifieddiff
+import json
 
 # Import from our local package modules
 from .validation import validate_based_code, validate_based_diff
@@ -101,6 +102,8 @@ def handle_new_message(
         )
     else:
         # Generate a diff to update an existing Based file
+        print("=== _generate_based_diff ===")
+        print(triage_result)
         return _generate_based_diff(
             model, model_ak, model_base_url,
             selected_filename, prompt, selected_based_file, triage_result
@@ -151,7 +154,7 @@ def _generate_whole_based_file(
             base_url=model_base_url,
             api_key=model_ak
         )
-        generated_output = generation_response.get("text") or generation_response.get("output")
+        generated_output = generation_response.get("content") or generation_response.get("text") or generation_response.get("output")
 
         validation_result = validate_based_code(generated_output)
         if validation_result.get("status") == "success":
@@ -187,34 +190,57 @@ def _generate_based_diff(
 ) -> dict:
     """
     Helper for handle_new_message: generate a diff to update an existing .based file.
+    Uses a more flexible approach to diff validation.
     """
     current_based_content = selected_based_file.get("latest_content", "")
 
-    # Build the system prompt
+    # Build a clearer system prompt with examples
     json_format_instructions = (
-        "Return a JSON object in the following format: "
+        "Return a JSON object in the following format, where text is the diff to be applied to the current Based file: "
         "{ \"type\": \"diff\", \"filename\": <string>, \"text\": <string> }."
     )
+    
+    # Add a simple unified diff example to the prompt
+    example_diff = (
+        "+++ file.based\n"
+        "@@ -5,6 +5,9 @@\n"
+        " \texisting line\n"
+        " \texisting line\n"
+        "+\tnew line 1\n"
+        "+\tnew line 2\n"
+        "+\tnew line 3\n"
+        " \texisting line\n"
+        " \texisting line\n"
+    )
+    
     generation_prompt = (
-        f"Based on the following context, generate a unified diff to update the existing Based file.\n\n"
+        f"Based on the following context, generate a diff to update the existing Based file.\n\n"
         f"BASED_GUIDE:\n{BASED_GUIDE}\n\n"
         f"Context summary:\n{triage_result.get('summary', '')}\n\n"
         f"Extracted context:\n{triage_result.get('extracted_context', '')}\n\n"
         f"Files list:\n{', '.join(triage_result.get('files_list', []))}\n\n"
+        f"Current Based file name:\n{selected_filename}\n\n"
         f"Current Based file content:\n{current_based_content}\n\n"
         f"User prompt:\n{prompt}\n\n"
+        f"IMPORTANT: Generate a proper unified diff format like this example:\n{example_diff}\n\n"
+        f"RULES FOR DIFF GENERATION:\n"
+        f"1. Do NOT modify existing code unless absolutely necessary\n"
+        f"2. Add new functionality by adding new lines in appropriate places\n"
+        f"3. Maintain the exact same indentation style used in the original file\n"
+        f"4. Only include the changed lines and minimal context in your diff\n"
+        f"5. Make sure your diff applies cleanly to the original file\n\n"
         f"{json_format_instructions}\n"
-        "Please generate a unified diff that updates the Based file."
+        "Please generate a diff that updates the Based file according to the user's request."
     )
+    
     llm_conversation = [
         {"role": "system", "content": generation_prompt},
-        {"role": "user", "content": "Generate a unified diff for updating the Based file."}
+        {"role": "user", "content": "Generate a diff for updating the Based file."}
     ]
 
     max_attempts = 5
     attempt = 0
-    generated_diff = None
-
+    
     while attempt < max_attempts:
         generation_response = prompt_llm_json_output(
             conversation=llm_conversation,
@@ -222,33 +248,50 @@ def _generate_based_diff(
             base_url=model_base_url,
             api_key=model_ak
         )
-        generated_diff = generation_response.get("text") or generation_response.get("output")
-
-        # Local check
+        print("== Generated diff ==")
+        generated_diff = generation_response.get("content")
+        print(generated_diff)
+        
+        # Parse the JSON to extract the "text" parameter
         try:
-            new_content = unifieddiff.apply_patch(current_based_content, generated_diff)
-            recomputed_diff = unifieddiff.make_patch(current_based_content, new_content)
-            if recomputed_diff.strip() != generated_diff.strip():
-                raise Exception("Local diff test failed: Diff is inconsistent.")
+            generated_diff_obj = json.loads(generated_diff)
+            generated_diff = generated_diff_obj.get("text")
+            if not generated_diff:
+                raise ValueError("Missing 'text' field in JSON response")
+            print("== Parsed diff ==")
+            print(generated_diff)
         except Exception as e:
-            # Immediately fail this attempt
-            llm_conversation[0]["content"] += f"\nLocal diff consistency check failed: {str(e)}"
+            llm_conversation[0]["content"] += f"\nError parsing JSON: {str(e)}"
             attempt += 1
             continue
 
-        # External validation
-        validation_result = validate_based_diff(generated_diff, current_based_content)
-        if validation_result.get("status") == "success":
-            final_diff = validation_result.get("converted_diff", generated_diff)
-            return {
-                "output": final_diff,
-                "type": "diff",
-                "based_filename": selected_filename if selected_filename else "existing_based_file.based"
-            }
-        else:
-            error_msg = validation_result.get("error", "Unknown diff validation error")
-            llm_conversation[0]["content"] += f"\nDiff validation error: {error_msg}"
+        # Skip the strict local check, just make sure the diff can be applied
+        try:
+            new_content = unifieddiff.apply_patch(current_based_content, generated_diff)
+            print("=== Local diff patch applied successfully ===")
+            print("new_content:", new_content)
+            
+            # External validation of the resulting content
+            validation_result = validate_based_diff(generated_diff, current_based_content)
+            if validation_result.get("status") == "success":
+                final_diff = validation_result.get("converted_diff", generated_diff)
+                return {
+                    "output": final_diff,
+                    "type": "diff",
+                    "based_filename": selected_filename if selected_filename else "existing_based_file.based"
+                }
+            else:
+                error_msg = validation_result.get("error", "Unknown diff validation error")
+                llm_conversation[0]["content"] += f"\nDiff validation error: {error_msg}\n"
+                llm_conversation[0]["content"] += "Please try again with a simpler diff that maintains the same structure as the original file."
+                attempt += 1
+                
+        except Exception as e:
+            # If the diff can't be applied at all, try again
+            llm_conversation[0]["content"] += f"\nFailed to apply diff: {str(e)}\n"
+            llm_conversation[0]["content"] += "Please generate a simpler, cleaner diff that follows unified diff format."
             attempt += 1
+            continue
 
     return {
         "output": "Error: Unable to generate a valid Based diff after multiple attempts.",

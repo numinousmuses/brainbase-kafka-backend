@@ -1,4 +1,5 @@
 from openai import OpenAI
+import json
 
 def prompt_llm_json_output(
     conversation: list,
@@ -55,7 +56,12 @@ def prompt_llm_json_output(
     
     # If the response is an object with to_dict(), convert to a dict
     if hasattr(response_message, "to_dict"):
+        # parsed_output = json.loads(response_message)
+        # print("parsed_output:", parsed_output)
         response_message = response_message.to_dict()
+        print("LLM Generated Ouput")
+        
+        
     else:
         response_message = dict(response_message)
 

@@ -69,27 +69,29 @@ async def handle_new_message_action(
     selected_based_file_obj = None
     other_based_files_dict = []
     print("Processing chat_files_based_objs, selected_filename:", selected_filename)
+    print(" - chat_files_based_objs:", chat_files_based_objs)
     for bf_obj in chat_files_based_objs:
-        print(" - Inspecting based file:", bf_obj.name)
-        if selected_filename and bf_obj.name == selected_filename:
+        # Access file name using key indexing
+        print(" - Inspecting based file:", bf_obj.get("name"))
+        if selected_filename and bf_obj.get("name") == selected_filename:
             selected_based_file_obj = bf_obj
-            print("   -> Selected based file found:", bf_obj.name)
+            print("   -> Selected based file found:", bf_obj.get("name"))
         else:
-            other_based_files_dict.append(bf_obj.dict())
-            print("   -> Adding to other_based_files_dict:", bf_obj.name)
+            other_based_files_dict.append(bf_obj)
+            print("   -> Adding to other_based_files_dict:", bf_obj.get("name"))
 
     # If no file was explicitly selected, treat all as 'other'
     if not selected_based_file_obj:
         print("No selected based file found. Using all based files as other_based_files_dict.")
-        other_based_files_dict = [bf_obj.dict() for bf_obj in chat_files_based_objs]
+        other_based_files_dict = [bf_obj for bf_obj in chat_files_based_objs]
 
-    selected_based_file_dict = selected_based_file_obj.dict() if selected_based_file_obj else None
+    # If a based file was selected, use it as is (it's already a dict)
+    selected_based_file_dict = selected_based_file_obj if selected_based_file_obj else None
     print("Final selected_based_file_dict:", selected_based_file_dict)
     print("Other based files dict:", other_based_files_dict)
 
     # 1) Call handle_new_message
-    print("Calling handle_new_message with parameters:")
-    print({
+    call_params = {
         "model_name": model_name,
         "model_ak": model_ak,
         "model_base_url": model_base_url,
@@ -98,10 +100,12 @@ async def handle_new_message_action(
         "prompt": prompt,
         "is_first_prompt": is_first_prompt,
         "is_chat_or_composer": is_chat_or_composer,
-        "conversation": [cm.dict() for cm in conversation_objs],
-        "chat_files_text": [cft.dict() for cft in chat_files_text_objs],
+        "conversation": [cm.dict() if hasattr(cm, "dict") else cm for cm in conversation_objs],
+        "chat_files_text": [cft.dict() if hasattr(cft, "dict") else cft for cft in chat_files_text_objs],
         "other_based_files": other_based_files_dict
-    })
+    }
+    print("Calling handle_new_message with parameters:")
+    # print(call_params)
     result = handle_new_message(
         model_name,
         model_ak,
@@ -111,8 +115,8 @@ async def handle_new_message_action(
         prompt,
         is_first_prompt,
         is_chat_or_composer,
-        [cm.dict() for cm in conversation_objs],   # conversation
-        [cft.dict() for cft in chat_files_text_objs],
+        [cm.dict() if hasattr(cm, "dict") else cm for cm in conversation_objs],
+        [cft.dict() if hasattr(cft, "dict") else cft for cft in chat_files_text_objs],
         other_based_files_dict
     )
     print("Result from handle_new_message:", result)
@@ -186,6 +190,7 @@ async def handle_new_message_action(
         }
         print("Constructed agent_response for 'based' type:", agent_response)
 
+        # Create a conversation block and convert it to dict before sending
         new_convo_block = ChatMessage(
             role="assistant",
             type="file",
@@ -196,7 +201,15 @@ async def handle_new_message_action(
         )
         conversation_objs.append(new_convo_block)
         print("Appended new conversation block for based file:", new_convo_block)
-        await websocket.send_json({"action": "agent_response", "message": agent_response, "block": new_convo_block})
+
+        # Convert new_convo_block to dict (if it has a .dict() method) to ensure JSON serializability
+        new_convo_block_serializable = new_convo_block.dict() if hasattr(new_convo_block, "dict") else new_convo_block
+
+        await websocket.send_json({
+            "action": "agent_response",
+            "message": agent_response,
+            "block": new_convo_block_serializable
+        })
         print("Sent JSON response for 'based' type over websocket.")
 
     elif result["type"] == "diff":
@@ -210,7 +223,8 @@ async def handle_new_message_action(
 
         diff_text = result["output"]
         print("Diff text received:", diff_text)
-        chat_file_id = selected_based_file_obj.file_id
+        # Access file_id from the dict
+        chat_file_id = selected_based_file_obj.get("file_id")
         print("Using chat_file_id:", chat_file_id)
         existing_chat_file = db.query(ChatFile).filter(ChatFile.id == chat_file_id).first()
         print("Existing chat file:", existing_chat_file)
@@ -258,7 +272,7 @@ async def handle_new_message_action(
         db.add(new_version)
         print("Added new version to DB:", new_version)
 
-        # Optionally recompute older diffs (not always needed, but included here)
+        # Optionally recompute older diffs
         older_diffs = []
         all_versions = (
             db.query(ChatFileVersion)
@@ -286,7 +300,8 @@ async def handle_new_message_action(
             "role": "assistant",
             "type": "file",
             "content": {
-                "based_filename": selected_based_file_obj.name,
+                # Access name using key indexing
+                "based_filename": selected_based_file_obj.get("name"),
                 "based_content": new_content
             }
         }
@@ -297,7 +312,7 @@ async def handle_new_message_action(
                 role="assistant",
                 type="file",
                 content=json.dumps({
-                    "based_filename": selected_based_file_obj.name,
+                    "based_filename": selected_based_file_obj.get("name"),
                     "based_content": diff_text
                 })
             )
