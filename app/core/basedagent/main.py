@@ -59,18 +59,32 @@ def handle_new_message(
         model_base_url=model_base_url
     )
 
+    
+
+    triage_result = triage_result["content"]
+    triage_result = json_repair.loads(triage_result)
+
     print('\n\n\n\n\n\n\n\n\n\ntriage_result')
     print(triage_result)
     print('\n\n\n\n\n\n\n\n\n')
 
-    triage_result = triage_result["content"]
-    triage_result = json_repair.loads(triage_result)
     
-    gen_new_file = triage_result.get("genNewFile", is_first_prompt)
-    plain_response_requested = triage_result.get("plain_response", False)
+
+    gen_new_file = triage_result["genNewFile"]
+    plain_response_requested = triage_result["plain_response"]
+
+    
+
+    if is_first_prompt or gen_new_file:
+        print("=== _generate_whole_based_file ===")
+        # Generate a brand-new Based file
+        return _generate_whole_based_file(
+            model, model_ak, model_base_url,
+            selected_filename, prompt, triage_result
+        )
 
     # 2) If plain response or not composer, just return text
-    if plain_response_requested or not is_chat_or_composer:
+    elif plain_response_requested or not is_chat_or_composer:
         print('returning plain response')
         json_format_instructions = (
             "Return a JSON object in the following format: "
@@ -108,14 +122,7 @@ def handle_new_message(
             "message": generated_text
         }
 
-    # 3) Otherwise, we’re generating or updating Based code
-    if is_first_prompt or gen_new_file:
-        print("=== _generate_whole_based_file ===")
-        # Generate a brand-new Based file
-        return _generate_whole_based_file(
-            model, model_ak, model_base_url,
-            selected_filename, prompt, triage_result
-        )
+    
     else:
         # Generate a diff to update an existing Based file
         print("=== _generate_based_diff ===")
@@ -170,11 +177,16 @@ def _generate_whole_based_file(
             base_url=model_base_url,
             api_key=model_ak
         )
-        generated_output = generation_response.get("content") or generation_response.get("text") or generation_response.get("output")
+        generated_output = generation_response.get("content")
+
+        generated_output_obj = json_repair.loads(generated_output)
+        generated_output = generated_output_obj.get("text")
+        new_file_name = generated_output_obj.get("filename")
 
         validation_result = validate_based_code(generated_output)
         if validation_result.get("status") == "success":
             final_output = validation_result.get("converted_code", generated_output)
+            print(f"Generated valid .based file: {final_output}")
             break
         else:
             error_msg = validation_result.get("error", "Unknown validation error")
@@ -191,7 +203,7 @@ def _generate_whole_based_file(
     return {
         "output": final_output,
         "type": "based",
-        "based_filename": selected_filename if selected_filename else "new_based_file.based"
+        "based_filename": new_file_name if new_file_name else "new_based_file.based"
     }
 
 
