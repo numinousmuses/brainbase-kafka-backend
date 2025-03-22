@@ -93,7 +93,6 @@ async def handle_new_message_action(
     # 1) Call handle_new_message
     call_params = {
         "model_name": model_name,
-        "model_ak": model_ak,
         "model_base_url": model_base_url,
         "selected_filename": selected_filename,
         "selected_based_file_dict": selected_based_file_dict,
@@ -146,9 +145,17 @@ async def handle_new_message_action(
 
     elif result["type"] == "based":
         print("Processing 'based' type result")
-        # A brand-new .based file was created
-        based_filename = result.get("based_filename", "new_based_file.based")
-        file_content = result["output"]
+        
+        # Parse the output JSON string to extract the actual data
+        try:
+            output_data = json.loads(result["output"])
+            based_filename = output_data.get("filename", "new_based_file.based")
+            file_content = output_data.get("text", "")
+        except (json.JSONDecodeError, KeyError) as e:
+            print(f"Error parsing output JSON: {e}")
+            based_filename = "new_based_file.based"
+            file_content = result.get("output", "")
+        
         print("New based file details:")
         print(" - based_filename:", based_filename)
         print(" - file_content:", file_content)
@@ -211,6 +218,7 @@ async def handle_new_message_action(
             "block": new_convo_block_serializable
         })
         print("Sent JSON response for 'based' type over websocket.")
+
 
     elif result["type"] == "diff":
         print("Processing 'diff' type result")
