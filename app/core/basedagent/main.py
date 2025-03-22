@@ -200,8 +200,8 @@ def _generate_based_diff(
         "{ \"type\": \"diff\", \"filename\": <string>, \"text\": <string> }."
     )
     
-    # Add a simple unified diff example to the prompt
-    example_diff = (
+    example_diff_basic = (
+        "--- file.based\n"
         "+++ file.based\n"
         "@@ -5,6 +5,9 @@\n"
         " \texisting line\n"
@@ -212,7 +212,36 @@ def _generate_based_diff(
         " \texisting line\n"
         " \texisting line\n"
     )
-    
+
+    example_diff_replace = (
+        "--- file.based\n"
+        "+++ file.based\n"
+        "@@ -10,7 +10,8 @@\n"
+        " \tunchanged line\n"
+        " \tunchanged line\n"
+        "-\told line to remove\n"
+        "+\tnew replacement line\n"
+        "+\tadditional new line\n"
+        " \tunchanged line\n"
+        " \tunchanged line\n"
+    )
+
+    example_diff_multiple = (
+        "--- file.based\n"
+        "+++ file.based\n"
+        "@@ -5,6 +5,7 @@\n"
+        " \tcontext line\n"
+        " \tcontext line\n"
+        "+\tnew line\n"
+        " \tcontext line\n"
+        "@@ -20,7 +21,6 @@\n"
+        " \tmore context\n"
+        " \tmore context\n"
+        "-\tline to delete\n"
+        " \tmore context\n"
+        " \tmore context\n"
+    )
+
     generation_prompt = (
         f"Based on the following context, generate a diff to update the existing Based file.\n\n"
         f"BASED_GUIDE:\n{BASED_GUIDE}\n\n"
@@ -222,16 +251,22 @@ def _generate_based_diff(
         f"Current Based file name:\n{selected_filename}\n\n"
         f"Current Based file content:\n{current_based_content}\n\n"
         f"User prompt:\n{prompt}\n\n"
-        f"IMPORTANT: Generate a proper unified diff format like this example:\n{example_diff}\n\n"
+        f"IMPORTANT: Generate a proper unified diff format. Here are valid examples:\n\n"
+        f"Example 1 - Adding new lines:\n{example_diff_basic}\n\n"
+        f"Example 2 - Replacing lines:\n{example_diff_replace}\n\n"
+        f"Example 3 - Multiple changes:\n{example_diff_multiple}\n\n"
         f"RULES FOR DIFF GENERATION:\n"
         f"1. Do NOT modify existing code unless absolutely necessary\n"
         f"2. Add new functionality by adding new lines in appropriate places\n"
         f"3. Maintain the exact same indentation style used in the original file\n"
         f"4. Only include the changed lines and minimal context in your diff\n"
-        f"5. Make sure your diff applies cleanly to the original file\n\n"
+        f"5. Make sure your diff applies cleanly to the original file\n"
+        f"6. Always include both '---' and '+++' lines in your diff\n"
+        f"7. Use proper unified diff headers with correct line numbers\n\n"
         f"{json_format_instructions}\n"
         "Please generate a diff that updates the Based file according to the user's request."
     )
+
     
     llm_conversation = [
         {"role": "system", "content": generation_prompt},
@@ -248,9 +283,9 @@ def _generate_based_diff(
             base_url=model_base_url,
             api_key=model_ak
         )
-        print("== Generated diff ==")
+        print("\n\n\n\n\n\nGenerated Diff\n\n\n\n\n\n")
         generated_diff = generation_response.get("content")
-        print(generated_diff)
+        # print(generated_diff)
         
         # Parse the JSON to extract the "text" parameter
         try:
@@ -258,21 +293,23 @@ def _generate_based_diff(
             generated_diff = generated_diff_obj.get("text")
             if not generated_diff:
                 raise ValueError("Missing 'text' field in JSON response")
-            print("== Parsed diff ==")
-            print(generated_diff)
+            print("\n\n\n\n\n\n\nSuccessfully parsed diff\n\n\n\n\n\n\n")
+            # print(generated_diff)
         except Exception as e:
             llm_conversation[0]["content"] += f"\nError parsing JSON: {str(e)}"
+            print("\n\n\n\n\n\n\nFailed to parse diff\n\n\n\n\n\n\n")
             attempt += 1
             continue
 
         # Skip the strict local check, just make sure the diff can be applied
         try:
             new_content = unifieddiff.apply_patch(current_based_content, generated_diff)
-            print("=== Local diff patch applied successfully ===")
+            print("\n\n\n\n\n\n\nSuccessfully applied local diff patch\n\n\n\n\n\n\n")
             print("new_content:", new_content)
             
             # External validation of the resulting content
             validation_result = validate_based_diff(generated_diff, current_based_content)
+            print(f"\n\n\n\n\n\n\Validation result {validation_result} \n\n\n\n\n\n\n")
             if validation_result.get("status") == "success":
                 final_diff = validation_result.get("converted_diff", generated_diff)
                 return {
