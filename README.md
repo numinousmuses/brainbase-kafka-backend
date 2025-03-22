@@ -12,6 +12,9 @@
 
 # [Demo](https://youtu.be/to9kwjJGY74)
 
+![Screenshot](https://i.postimg.cc/0jyXs7Rs/Screenshot-2025-03-22-at-6-18-48-AM.png)
+
+
 There is a demo deployed, but it's very slow due to free tier rate limit. For a faster experience you can clone the [frontend](https://github.com/numinousmuses/brainbase-poc) and [backend](https://github.com/numinousmuses/brainbase-kafka-backend) repos then spin up the backend with the steps noted in section 2 of the brief docs below, then spin up the frontend with npm run dev.
 
 Deployed backend: https://brainbase-kafka-backend.onrender.com/
