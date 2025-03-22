@@ -16,7 +16,7 @@ There is a demo deployed, but it's very slow due to free tier rate limit. For a 
 
 Deployed backend: https://brainbase-kafka-backend.onrender.com/
 
-Deployed frontend
+Deployed frontend: https://kafka-brainbase.vercel.app/
 
 ---
 
