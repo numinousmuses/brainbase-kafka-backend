@@ -12,7 +12,7 @@ from app.core.ws.ws_disconnect import persist_on_disconnect
 
 router = APIRouter()
 
-@router.websocket("/ws/{chat_id}")
+@router.websocket("/{chat_id}")
 async def chat_ws(websocket: WebSocket, chat_id: str):
     """
     Main WebSocket handler that:
