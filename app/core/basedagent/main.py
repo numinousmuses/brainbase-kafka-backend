@@ -73,8 +73,10 @@ def handle_new_message(
             f"Extracted context:\n{triage_result.get('extracted_context', '')}\n\n"
             f"Files list:\n{', '.join(triage_result.get('files_list', []))}\n\n"
             f"User prompt:\n{prompt}\n\n"
+            f"Past conversation:\n{conversation}\n\n"
+            f"Selected .based file tostring:\n{str(selected_based_file)}\n\n"
             f"{json_format_instructions}\n"
-            "Generate a plain text response summarizing the context and addressing the prompt."
+            "Generate a plain text response summarizing addressing the prompt."
         )
         llm_conversation = [
             {"role": "system", "content": generation_prompt},
