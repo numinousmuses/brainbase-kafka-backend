@@ -230,7 +230,7 @@ async def chat_ws(websocket: WebSocket, chat_id: str):
                 elif action == "new_message":
                     model_name = message_data.get("model", "default_model")
                     prompt = message_data.get("prompt", "")
-                    is_first_prompt = message_data.get("is_first_prompt", False)
+                    is_first_prompt = message_data.get("is_first_prompt", True)
                     is_chat_or_composer = message_data.get("is_chat_or_composer", False)
                     selected_filename = message_data.get("selected_filename", None)
 

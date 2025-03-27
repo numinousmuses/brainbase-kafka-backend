@@ -184,7 +184,7 @@ def _generate_whole_based_file(
     )
     generation_prompt = (
         f"Based on the following context, generate a complete and valid Based file.\n\n"
-        f"BASED_GUIDE:\n{BASED_GUIDE}\n\n"
+        f"BASED_GUIDE: the following is the guide on how to write a based file, examples included. IT IS IMPERATIVE you conform to this guide and the format described. \n{BASED_GUIDE}\n\n /END BASED_GUIDE/\n\n"
         f"Context summary:\n{triage_result.get('summary', '')}\n\n"
         f"Extracted context:\n{triage_result.get('extracted_context', '')}\n\n"
         f"Files list:\n{', '.join(triage_result.get('files_list', []))}\n\n"
@@ -192,6 +192,11 @@ def _generate_whole_based_file(
         f"{json_format_instructions}\n"
         "Please generate the complete .based file content."
     )
+
+    # save generation prompt to file
+    with open("generation_prompt.txt", "w") as f:
+        f.write(generation_prompt)
+
     llm_conversation = [
         {"role": "system", "content": generation_prompt},
         {"role": "user", "content": "Generate complete Based file content."}
