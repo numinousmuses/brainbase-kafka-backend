@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from app.core.config import BASED_GUIDE, UNIFIED_DIFF, VALIDATION_FUNCTION, USER_MESSAGE_BASED_GUIDELINES
+from app.core.config import BASED_GUIDE, UNIFIED_DIFF, VALIDATION_FUNCTION, USER_MESSAGE_BASED_GUIDELINES, TOOLS_DOCUMENTATION
 import app.core.unifieddiff as unifieddiff
 import json
 # Import from our local package modules
@@ -82,6 +82,19 @@ def handle_new_message(
     print(triage_result)
     print('\n\n\n\n\n\n\n\n\n')
 
+    # 2) Run the Tool Context Agent to see which tools are relevant
+    tool_agent_result = tool_context_agent(
+        prompt=prompt,
+        triage_result=triage_result,
+        conversation=conversation,
+        tools_documentation=TOOLS_DOCUMENTATION,   # reference wherever you store this
+        model=model,
+        model_ak=model_ak,
+        model_base_url=model_base_url
+    )
+    relevant_tools = tool_agent_result.get("tools", [])
+    print("\n\nTool Agent returned these relevant tools:", relevant_tools, "\n\n")
+
     gen_new_file = triage_result["genNewFile"]
     plain_response_requested = triage_result["plain_response"]
 
@@ -90,7 +103,8 @@ def handle_new_message(
         # Generate a brand-new Based file
         return _generate_whole_based_file(
             model, model_ak, model_base_url,
-            selected_filename, prompt, triage_result
+            selected_filename, prompt, triage_result, 
+            relevant_tools
         )
 
     # 2) If plain response or not composer, just return text
@@ -162,7 +176,8 @@ def handle_new_message(
         print(triage_result)
         return _generate_based_diff(
             model, model_ak, model_base_url,
-            selected_filename, prompt, selected_based_file, triage_result
+            selected_filename, prompt, selected_based_file, triage_result, 
+            relevant_tools
         )
 
 
@@ -172,11 +187,24 @@ def _generate_whole_based_file(
     model_base_url: str,
     selected_filename: str,
     prompt: str,
-    triage_result: dict
+    triage_result: dict,
+    relevant_tools: list
 ) -> dict:
     """
     Helper for handle_new_message: create a brand new .based file.
     """
+
+    # This step aggregates the full documentation text for each relevant tool.
+    relevant_docs = []
+    for tool_name in relevant_tools:
+        for t in TOOLS_DOCUMENTATION:
+            if t["name"] == tool_name:
+                # Use short description or the full 'docs' to pass along
+                relevant_docs.append(f"Tool Name: {t['name']}\nFunction: {t['function']}\nDocs:\n{t['docs']}")
+                break
+
+    combined_tool_docs = "\n\n".join(relevant_docs)
+
     # Build the system prompt
      # Build the system prompt
     json_format_instructions = (
@@ -188,6 +216,7 @@ def _generate_whole_based_file(
         f"BASED_GUIDE: the following is the guide on how to write a based file, examples included. IT IS IMPERATIVE you conform to this guide and the format described. An important thing to note about based is that your conditions are all strings, as you see in the examples. You must follow the loop until paradigm, as the examples demonstrate. If you do not follow this, the agent will not be compatible with the based engine, and this will cause damages to the businesses relying on these agents. People's livelihoods depend on the generated agents. It is immoral for you to follow a different format.  \n{BASED_GUIDE}\n\n IT IS IMPERATIVE you conform to this guide and the format described. An important thing to note about based is that your conditions are all strings, as you see in the examples. Your generated code's most outside layers must be loop and until. Meaning at the top level, you MUST have a loop and until/END BASED_GUIDE/\n\n"
         f"Context summary:\n{triage_result.get('summary', '')}\n\n"
         f"Extracted context:\n{triage_result.get('extracted_context', '')}\n\n"
+        f"Relevant Tools Docs:\n{combined_tool_docs}\n\n"
         f"Files list:\n{', '.join([json.dumps(item) if isinstance(item, dict) else str(item) for item in triage_result.get('files_list', [])])}\n\n"
         f"User prompt:\n{prompt}\n\n"
         f"{json_format_instructions}\n"
@@ -284,7 +313,8 @@ def _generate_based_diff(
     selected_filename: str,
     prompt: str,
     selected_based_file: dict,
-    triage_result: dict
+    triage_result: dict,
+    relevant_tools: list
 ) -> dict:
     """
     Helper for handle_new_message: generate a diff to update an existing .based file.
@@ -293,6 +323,17 @@ def _generate_based_diff(
     print("\n\n\n\n\n\nSelected based file")
     print(selected_based_file)
     current_based_content = selected_based_file.get("latest_content", "")
+
+    # This step aggregates the full documentation text for each relevant tool.
+    relevant_docs = []
+    for tool_name in relevant_tools:
+        for t in TOOLS_DOCUMENTATION:
+            if t["name"] == tool_name:
+                # Use short description or the full 'docs' to pass along
+                relevant_docs.append(f"Tool Name: {t['name']}\nFunction: {t['function']}\nDocs:\n{t['docs']}")
+                break
+
+    combined_tool_docs = "\n\n".join(relevant_docs)
 
     # Build a clearer system prompt with examples
     json_format_instructions = (
@@ -347,6 +388,7 @@ def _generate_based_diff(
         f"BASED_GUIDE:\n{BASED_GUIDE}\n\n"
         f"Context summary:\n{triage_result.get('summary', '')}\n\n"
         f"Extracted context:\n{triage_result.get('extracted_context', '')}\n\n"
+        f"Relevant Tools:\n{combined_tool_docs}\n\n"
         f"Files list:\n{', '.join(triage_result.get('files_list', []))}\n\n"
         f"Current Based file name:\n{selected_filename}\n\n"
         f"Current Based file content:\n{current_based_content}\n\n"
@@ -443,3 +485,92 @@ def _generate_based_diff(
         "type": "response",
         "message": "Diff validation failed repeatedly."
     }
+
+
+def tool_context_agent(
+    prompt: str,
+    triage_result: dict,
+    conversation: list,
+    tools_documentation: list,
+    model: str,
+    model_ak: str,
+    model_base_url: str
+) -> dict:
+    """
+    Decides which tools might be relevant to the user's request.
+    Returns a dict like:
+      {
+        "tools": [
+           "Gmail - Send Email",
+           "Twilio - Send SMS"
+        ]
+      }
+    or an empty "tools" list if none are relevant.
+    """
+
+    # Summarize the tool docs in a concise manner to the LLM
+    # Or you can pass them in more detail if you prefer
+    tools_summary = []
+    for t in tools_documentation:
+        tool_desc = f"{t['name']} - function: {t['function']}\nDescription: {t['shortDescription']}"
+        tools_summary.append(tool_desc)
+    tools_text = "\n\n".join(tools_summary)
+
+    # Instruct the LLM to select relevant tools
+    system_prompt = f"""
+You are a "Tool Context Agent". The user prompt is:
+{prompt}
+
+We've already performed a high-level triage to gather context.
+Here is the triage result:
+{triage_result}
+
+Here is the conversation so far:
+{conversation}
+
+Below is a list of available tools:
+
+{tools_text}
+
+Return a JSON object in the following format:
+{{
+   "tools": [ "Tool Name #1", "Tool Name #2", ...]
+}}
+
+Only include the names of the tools you deem relevant. If no tools are relevant, return an empty array.
+"""
+
+    llm_conversation = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": "Which tools (by exact name) are relevant to the user's request?"}
+    ]
+
+    # Attempt to parse the JSON
+    max_attempts = 5
+    attempt = 0
+    while attempt < max_attempts:
+        try:
+            generation_response = prompt_llm_json_output(
+                conversation=llm_conversation,
+                model=model,
+                base_url=model_base_url,
+                api_key=model_ak
+            )
+            content = generation_response.get("content", "{}")
+            tool_json = json.loads(content)
+            # Ensure we at least have a "tools" key
+            if "tools" not in tool_json:
+                raise ValueError("No 'tools' key found in the tool context agent response.")
+
+            return tool_json
+
+        except (json.JSONDecodeError, ValueError) as e:
+            # If we fail to parse or "tools" key is missing, we prompt the LLM again
+            llm_conversation[0]["content"] += (
+                f"\n\nThe response could not be parsed. Make sure you return valid JSON with a 'tools' array. "
+                f"Error detail: {str(e)}"
+            )
+            attempt += 1
+
+    # If repeated failures, return empty
+    return { "tools": [] }
