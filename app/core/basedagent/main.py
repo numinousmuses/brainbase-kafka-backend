@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from app.core.config import BASED_GUIDE, UNIFIED_DIFF, VALIDATION_FUNCTION
+from app.core.config import BASED_GUIDE, UNIFIED_DIFF, VALIDATION_FUNCTION, USER_MESSAGE_BASED_GUIDELINES
 import app.core.unifieddiff as unifieddiff
 import json
 # Import from our local package modules
@@ -103,7 +103,7 @@ def handle_new_message(
         generation_prompt = (
             f"Context summary:\n{triage_result.get('summary', '')}\n\n"
             f"Extracted context:\n{triage_result.get('extracted_context', '')}\n\n"
-            f"Files list:\n{', '.join(triage_result.get('files_list', []))}\n\n"
+            f"Files list:\n{', '.join([json.dumps(item) if isinstance(item, dict) else str(item) for item in triage_result.get('files_list', [])])}\n\n"
             f"User prompt:\n{prompt}\n\n"
             f"Past conversation:\n{conversation}\n\n"
             f"Selected .based file tostring:\n{str(selected_based_file)}\n\n"
@@ -179,15 +179,15 @@ def _generate_whole_based_file(
     """
     # Build the system prompt
     json_format_instructions = (
-        "Return a JSON object in the following format: "
+        "Return a JSON object in the following format: Your text file must begin with a based loop block, and have one or more until blocks."
         "{ \"type\": \"based\", \"filename\": <string>, \"text\": <string> }."
     )
     generation_prompt = (
-        f"Based on the following context, generate a complete and valid Based file.\n\n"
-        f"BASED_GUIDE: the following is the guide on how to write a based file, examples included. IT IS IMPERATIVE you conform to this guide and the format described. \n{BASED_GUIDE}\n\n /END BASED_GUIDE/\n\n"
+        f"Based on the following context, generate a complete and valid Based file. It is important to note that based may resemble python, but they are not the same. Based is COMPILED into python. Meaning that while loops are not valid and are broken code. based code is compiled into python, but not vice versa.    Based uses a loop until, whereas python normally has while loops. It is imperative you abide by this distrinction.\n\n"
+        f"BASED_GUIDE: the following is the guide on how to write a based file, examples included. IT IS IMPERATIVE you conform to this guide and the format described. An important thing to note about based is that your conditions are all strings, as you see in the examples. You must follow the loop until paradigm, as the examples demonstrate. If you do not follow this, the agent will not be compatible with the based engine, and this will cause damages to the businesses relying on these agents. People's livelihoods depend on the generated agents. It is immoral for you to follow a different format.  \n{BASED_GUIDE}\n\n IT IS IMPERATIVE you conform to this guide and the format described. An important thing to note about based is that your conditions are all strings, as you see in the examples. Your generated code's most outside layers must be loop and until. Meaning at the top level, you MUST have a loop and until/END BASED_GUIDE/\n\n"
         f"Context summary:\n{triage_result.get('summary', '')}\n\n"
         f"Extracted context:\n{triage_result.get('extracted_context', '')}\n\n"
-        f"Files list:\n{', '.join(triage_result.get('files_list', []))}\n\n"
+        f"Files list:\n{', '.join([json.dumps(item) if isinstance(item, dict) else str(item) for item in triage_result.get('files_list', [])])}\n\n"
         f"User prompt:\n{prompt}\n\n"
         f"{json_format_instructions}\n"
         "Please generate the complete .based file content."
@@ -199,7 +199,7 @@ def _generate_whole_based_file(
 
     llm_conversation = [
         {"role": "system", "content": generation_prompt},
-        {"role": "user", "content": "Generate complete Based file content."}
+        {"role": "user", "content": f"Generate complete Based file content. Note that based resembles python, but instead of while true, based must use the loop until paradigm. SO you are generating BASED, NOT python code. Based *resembles* python but they are not the same. Be very careful with your generation. Even though while true may be an alternative approach. You must use the loop until functionality and paradigm. Otherwise, your agent will be incompatible with the engine and will FAIL. {USER_MESSAGE_BASED_GUIDELINES}"}
     ]
 
     # Attempt up to 5 times to validate
@@ -233,19 +233,82 @@ def _generate_whole_based_file(
             print("New file content", generated_output)
             print("\n\n\n\n\n\n")
 
+            # New: Validate structure of generated Based file
+            # structure_attempts = 0
+            # valid_structure = False
+            # while structure_attempts < 5:
+            #     structure_prompt = (
+            #         "Based is a language compiled into python. It supports loop and until blocks, but not while loops. Review the following Based file content:\n"
+            #         f"{generated_output}\n\n"
+            #         "A valid Based file must include a 'loop' block (not a 'while true' block). If there is a while loop anywhere in the code, it is invalid and must be rewritten."
+            #         f"The complete Based guide is {BASED_GUIDE}.\n"
+            #         "and at least one 'until' block. Return a JSON object in the following format: "
+            #         "{\"valid\": true} if valid, or {\"valid\": false, \"error\": \"...\"} if not valid."
+            #     )
+            #     llm_structure_conversation = [
+            #         {"role": "system", "content": structure_prompt},
+            #         {"role": "user", "content": "Validate the Based file structure."}
+            #     ]
+            #     structure_response = prompt_llm_json_output(
+            #         conversation=llm_structure_conversation,
+            #         model=model,
+            #         base_url=model_base_url,
+            #         api_key=model_ak
+            #     )
+            #     try:
+            #         structure_result = json.loads(structure_response.get("content"))
+            #     except json.JSONDecodeError:
+            #         structure_result = {"valid": False, "error": "Invalid JSON response from structure validation."}
+    
+            #     if structure_result.get("valid") is True:
+            #         valid_structure = True
+            #         break
+            #     else:
+            #         llm_conversation[0]["content"] += f"\nStructure check failed: {structure_result.get('error', 'unknown error')}"
+            #         structure_attempts += 1
+            #         if structure_attempts < 5:
+            #             # Regenerate the Based file content using the updated prompt
+            #             generation_response = prompt_llm_json_output(
+            #                 conversation=llm_conversation,
+            #                 model=model,
+            #                 base_url=model_base_url,
+            #                 api_key=model_ak
+            #             )
+            #             content = generation_response.get("content")
+            #             generated_output_obj = json.loads(content)
+            #             generated_output = generated_output_obj.get("text")
+            #             print("Retrying based file generation. New content:")
+            #             print(generated_output)
+            #         else:
+            #             raise ValueError("Generated Based file does not meet required structure after multiple attempts.")
             
-            if not generated_output:
-                raise ValueError("Missing 'text' field in JSON response")
+            # # If we reach here, valid_structure is True so we proceed with further validation.
+            # if not generated_output:
+            #     raise ValueError("Missing 'text' field in JSON response")
                 
-            validation_result = validate_based_code(generated_output)
-            if validation_result.get("status") == "success":
-                final_output = validation_result.get("converted_code", generated_output)
-                print(f"Generated valid .based file: {final_output}")
-                break
-            else:
-                error_msg = validation_result.get("error", "Unknown validation error")
-                llm_conversation[0]["content"] += f"\nValidation error: {error_msg}"
-                attempt += 1
+            # validation_result = validate_based_code(generated_output)
+            # if validation_result.get("status") == "success":
+            #     final_output = validation_result.get("converted_code", generated_output)
+            #     print(f"Generated valid .based file: {final_output}")
+            #     break
+            # else:
+            #     error_msg = validation_result.get("error", "Unknown validation error")
+            #     llm_conversation[0]["content"] += f"\nValidation error: {error_msg}"
+            #     attempt += 1
+
+            
+            # if not generated_output:
+            #     raise ValueError("Missing 'text' field in JSON response")
+                
+            # validation_result = validate_based_code(generated_output)
+            # if validation_result.get("status") == "success":
+            #     final_output = validation_result.get("converted_code", generated_output)
+            #     print(f"Generated valid .based file: {final_output}")
+            #     break
+            # else:
+            #     error_msg = validation_result.get("error", "Unknown validation error")
+            #     llm_conversation[0]["content"] += f"\nValidation error: {error_msg}"
+            #     attempt += 1
                 
         except (json.JSONDecodeError, ValueError) as e:
             # Handle JSON parsing error by retrying with updated prompt

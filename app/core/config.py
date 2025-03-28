@@ -5,178 +5,184 @@ DATABASE_URL = "sqlite:///./my_database.db"
 VALIDATION_ENDPOINT = "https://brainbase-engine-python.onrender.com/validate"
 
 BASED_GUIDE = """
-
 ```markdown
-# Introduction – What is Brainbase?
+# 简介 – 什么是 Brainbase？
 
-**Brainbase** is the first-of-its-kind **Enterprise Agent Platform (EAP)** that provides large enterprise IT teams with a single place to **build**, **deploy**, and **test** their company’s AI workforce. Companies such as **Toyota** and **NBC** use Brainbase to build agents across **sales**, **marketing**, and **customer support**, and deploy them over **phone calls**, **SMS**, **email**, **chat**, and more. 
+**Brainbase** 是首创的 **企业代理平台（Enterprise Agent Platform, EAP）**，为大型企业 IT 团队提供了一个统一的平台来 **构建**、**部署** 并 **测试** 企业的 AI 劳动力。像 **丰田（Toyota）** 和 **NBC** 这样的公司会使用 Brainbase 在 **销售**、**市场营销** 和 **客户支持** 等领域构建各种代理，并将它们部署到 **电话**、**短信（SMS）**、**电子邮件**、**聊天** 等多种渠道。
 
-Our core technology is the **Based agent framework**, enabling enterprises to create **fully reliable, deterministic behavior** in their agents. This makes Brainbase feasible for **mission-critical**, customer-facing use cases in industries like **banking** and **healthcare**, where our competitors often fail to deliver due to reliability issues.
+我们核心的技术是 **Based 代理框架**，能让企业为其代理创造 **完全可靠、具备确定性行为** 的对话流程。这使得 Brainbase 在 **银行**、**医疗** 等关乎核心任务的、面向客户的应用场景下成为可行方案，而这类场景中我们的一些竞品往往因可靠性问题而难以满足要求。
 
 ---
 
-## What Is Based?
+## 什么是 Based？
 
-**Based** is a high-level AI instruction language designed to create **dynamic conversational agents** that operate flawlessly across multiple communication channels. It provides developers with an elegant, high-level syntax to build interactive workflows quickly and reliably.
+**Based** 是一种高级的 AI 指令语言（High-level AI instruction language），专为打造 **在多种通信渠道上无缝运转的动态对话代理** 而设计。它为开发者提供了精妙且简洁的语法，让构建交互式流程变得高效而可靠。
 
-### Key Features of Based
+### Based 的关键特性
 
-- **Intuitive and Expressive Syntax**  
-  Develop complex conversational logic with clarity and brevity.
+- **直观且富有表现力的语法**  
+  以清晰简洁的方式开发复杂对话逻辑。
 
-- **Specialized Constructs**  
-  Utilize built-in keywords like `talk`, `loop`, `until`, and `ask` to manage conversation flow and state effortlessly.
+- **针对对话的专用结构**  
+  内置关键字 `talk`、`loop`、`until`、`ask`，以便轻松管理对话流程与状态。
 
-- **Cross-Platform Flexibility**  
-  Create agents deployable on **chat**, **voice**, **email**, **SMS**, and more—all while sharing data seamlessly across channels.
+- **跨平台的灵活性**  
+  创建可部署于 **聊天**、**语音**、**电子邮件**、**短信**等多种渠道的代理，实现数据跨平台共享。
+
 ```
 
-You are the world expert in writing in a language called Based that is designed for provisioning AI agents. It’s a high-level Pythonic language that has some additional syntax. It makes building agents easier.
+```python
+# 在此处可插入任何 Pythonic 风格的 Based 代理示例代码
+```
 
-**Loop-Until**
+---
 
-Based runs on the concept of conversational loops and handoffs. It splits an entire conversation flow into manageable chunks of conversation which hands off to other agents when certain conditions are met.
+# Loop-Until
 
-FORMAT:
+Based 的核心概念是对话循环（conversational loops）和交接（handoffs）。它将完整的对话流程拆分为便于管理的小片段，并在满足某些条件时将对话交接给其他代理。
+
+**格式：**
 
 ```python
 loop:
-	res = talk("SYSTEM PROMPT FOR AGENT", True/False, {ANY INFO PASSED IN FROM PREVIOUS STEPS})
+    res = talk("SYSTEM PROMPT FOR AGENT", True/False, {ANY INFO PASSED IN FROM PREVIOUS STEPS})
 until "CONDITION 1":
-	# OTHER AGENTS, CODE, ETC.
+    # OTHER AGENTS, CODE, ETC.
 until "CONDITION 2":
-	# OTHER AGENTS, CODE, ETC.
+    # OTHER AGENTS, CODE, ETC.
 until ...
 ```
 
-RULES:
+**规则：**
 
-- Rule 1: `loop`  can only have a single line in them and they have to be a `talk` line.
-- Rule 2: each `until` can have return at the end of them that allows it to return information back to the `talk` loop, if there is not return in the `until` block after running that code it won’t return back to the `talk` loop again and will move on to the next loop
+- **规则 1**：`loop` 中只能有一行，并且这一行必须是 `talk`。
+- **规则 2**：每个 `until` 块的末尾都可以使用 `return` 将信息返回到 `talk` 所在的循环。如果在 `until` 块中没有使用 `return`，则不会返回到同一个 `talk` 循环，而是继续执行下一个 loop-until 流程。
 
-EXAMPLE: 
+**示例：**
 
 ```python
 loop:
-	res = talk("Talk to the user about the weather and try to learn about their city and where they'd want to see the weather at.", True)
+    res = talk("Talk to the user about the weather and try to learn about their city and where they'd want to see the weather at.", True)
 until "user mentions a city":
-	# code for fetching the weather at the given city
-	# weather = ...
-	return weather # return it back to the talk loop to keep the conversation going
+    # 在这里调用 API 或其他集成来获取用户提及城市的天气
+    # weather = ...
+    return weather # 将信息返回给 talk 循环，使对话得以继续
 ```
 
-Here the AI will talk to the user until the user mentions a city, and then it will get information from an API or other integration to find out about the weather and return it back to the `talk` loop so that the AI can give that information back to the user. At the end of this, the user will be in the same loop again so they can mention another city and keep continuing.
+在这个示例中，AI 会与用户聊天气，一直持续到用户提及了某个城市。随后，系统调用接口获取该城市的天气信息，并返回给对话循环，如此一来 AI 可以将天气信息反馈给用户。此后用户依旧处于相同的 `loop` 循环中，可再次提及其他城市并不断地循环下去。
 
-BEST PRACTICES
+**最佳实践**
 
-- PRACTICE 1: In the `talk` calls, the system prompts should be of the format of system prompts that are detailed that explain
-    - The agent’s purpose
-    - The agent’s style of conversation
-    - The exit (until) conditions
-    - Example things that the user may say for it to exit into one of the untils
-- PRACTICE 2: In the `talk` calls, pass in whatever information was obtained previously in the agent code that this agent should know as a dictionary in the `info` parameter
-    
-    This could include general information obtained before such as `{"name": <USER's NAME FROM PREVIOUS STEP>, "age": <USER AGE>}` as well as more detailed, use case specific ones such as `{"order_no": <ORDER NO>, "complaint_summary": <COMPLAINT SUMMARY>}`.
-    
-    Here, make sure that you’re passing in enough information for the agent to function well, but not too much that it will be inundated with unnecessary knowledge.
-    
+- **实践 1**：在 `talk` 中编写 System Prompt 时，最好使用以下格式：
+  - 明确代理的目的
+  - 明确对话的风格
+  - 说明退出（until）条件
+  - 给出用户可能的示例对话或行为，以便引导从该 `talk` 切换到相应的 `until`
+- **实践 2**：在 `talk` 中，可以通过第三个参数的字典形式传入在之前步骤中获取的上下文或信息：
+  
+  例如：`{"name": <上一步得到的用户姓名>, "age": <用户年龄>}`，或者更具业务场景的字典数据如 `{"order_no": <订单号>, "complaint_summary": <投诉概要>}` 等。
 
-**Subagent**
+  注：要确保传递给代理的信息足够它完成工作，但避免在无关信息上过度堆砌。
 
-One of the most powerful things you can do in Based is to call on subagents to perform one of AI tasks. You do this by calling the function `.ask` on any object defined in Based.
+---
 
-FORMAT:
+# Subagent
+
+在 Based 中最强大的能力之一，是能够调用子代理（subagent）执行某些 AI 任务。可以通过对任意在 Based 中定义的对象调用 `.ask` 方法来完成。
+
+**格式：**
 
 ```python
 info = some_object_from_before.ask(
-	question="The subagent's objective, in detail.",
-	example={"name": "Brian Based", previous_jobs=["JOB 1", "JOB 2"]} # the exact return format as an example
+    question="该子代理的目标，需描述清晰。",
+    example={"name": "Brian Based", "previous_jobs": ["JOB 1", "JOB 2"]} # 返回的数据格式示例
 )
 ```
 
-RULES:
+**规则：**
 
-- Rule 1: `question` should clearly outline what is expected of this agent, some of the most common ones are:
-    - Extract the `name` and `age` from this user output
-    - Summarize what was said
-    - Score the sentiment based on this criteria (detailed criteria here) from 1 (low) to 10 (high)
-- Rule 2: each `until` can have return at the end of them that allows it to return information back to the `talk` loop, if there is not return in the `until` block after running that code it won’t return back to the `talk` loop again and will move on to the next loop
+- **规则 1**：`question` 要明确需要子代理完成的任务。例如：
+  - 从用户输出中抽取 `name` 和 `age`
+  - 总结用户所说的内容
+  - 根据某些具体标准（需在问题中写明）进行情感打分，从 1（低）到 10（高）
 
-EXAMPLE:
+- （同上）**规则 2**：每个 `until` 块的末尾可以通过 `return` 返回信息给 `talk` 循环，如果不使用 `return`，则不会再回到同一个 `talk` 循环。
+
+**示例：**
 
 ```python
 loop:
-	res = talk("Talk to the user about the weather and try to learn about their city and where they'd want to see the weather at.", True)
+    res = talk("Talk to the user about the weather and try to learn about their city and where they'd want to see the weather at.", True)
 until "user mentions a city":
-	city_info = res.ask(question="Return the name of the city the user mentioned.", example={"city": "Boston"})
-	# city_info now has {"city": "city user mentioned"} and can be used in
-	# upcoming loops or API calls etc.
-	# weather = ...
-	return weather # return it back to the talk loop to keep the conversation going
+    city_info = res.ask(question="Return the name of the city the user mentioned.", example={"city": "Boston"})
+    # city_info 中现在包含{"city": "用户提及的城市"}，可在随后的流程或API调用中使用
+    # weather = ...
+    return weather # 将信息返回给 talk 循环，让代理继续和用户交互
 ```
 
-BEST PRACTICES
+**最佳实践**
 
-- PRACTICE 1: Keep the `question` parameter in `.ask` as clear as possible
-- PRACTICE 2: Make you `example` as detailed as possible, use reasonable fake example data on it to give the agent a better idea of what’s expected
-- PRACTICE 3: Function calls in Based are done with a combination of loop-until and ask where the `until` decides what function is being called and `.ask` is then used to get the necessary parameters from the conversation that the until is coming from (see above example)
+- **实践 1**：尽量让 `.ask` 的 `question` 简洁明确
+- **实践 2**：`example` 尽量详细，提供合理且能帮助子代理理解输出格式的示例数据
+- **实践 3**：在 Based 中进行函数调用，通常是用 loop-until 和 ask 的组合方式：`until` 判断要执行哪个功能，`.ask` 获取本次要调用的功能所需的参数（如上示例中提取城市名称）。
 
-**API calls**
+---
 
-Based provides two primary built in functions for making `GET` and `POST` requests to external endpoints.
+# API 调用
 
-FORMAT
+Based 内置了两种主要方式用于向外部端点进行 `GET` 和 `POST` 请求。
 
-GET
+**格式**
+
+**GET 请求**
 
 ```python
 res = api.get_req(
-	url="URL ENDPOINT TO CALL",
-	params={"a": "...", "b": "..."}, # URL parameters to use
-	headers={"Authentication": "..."} # headers to send
+    url="URL ENDPOINT TO CALL",
+    params={"a": "...", "b": "..."},
+    headers={"Authentication": "..."}
 )
 
-# res: {"response": {...}} # dictionary to return
+# res: {"response": {...}} # 最终返回为字典数据
 ```
 
-POST
+**POST 请求**
 
 ```python
 res = api.post_req(
-	url="URL ENDPOINT TO CALL",
-	data={"a": "...", "b": "..."}, # data to send
-	headers={"Authentication": "..."} # headers to send
+    url="URL ENDPOINT TO CALL",
+    data={"a": "...", "b": "..."},
+    headers={"Authentication": "..."}
 )
 
-# res: {"response": {...}} # dictionary to return
+# res: {"response": {...}} # 同样是字典数据
 ```
 
-BEST PRACTICES
+**最佳实践**
 
-- PRACTICE 1: If you don’t know output schema of the api call, it’s a good idea to combine it with an ask to generate the schema you want out of it using a subagent
-    
-    EXAMPLE:
-    
-    ```python
-    res = api.post_req(
-    	url="URL ENDPOINT TO CALL",
-    	data={"a": "...", "b": "..."}, # data to send
-    	headers={"Authentication": "..."} # headers to send
-    ) # unknown res schema
-    info = res.ask(
-    	question="Return the name and address info from this result.",
-    	example={"name": "...", "address": "..."}
-    ) # known schema as {"name": "...", "address": "..."}
-    ```
-    
+- **实践 1**：如果对返回数据的结构（schema）不清楚，可以结合子代理 `.ask` 生成自己需要的结构。例如：
 
-Common patterns
+  ```python
+  res = api.post_req(
+      url="URL ENDPOINT TO CALL",
+      data={"a": "...", "b": "..."},
+      headers={"Authentication": "..."}
+  ) # 不确定返回结构
+  info = res.ask(
+      question="Return the name and address info from this result.",
+      example={"name": "...", "address": "..."}
+  ) # 通过子代理转换为 {"name": "...", "address": "..."} 等我们需要的结构
+  ```
 
-Here are some common patterns of usage for Based.
+---
 
-Triage and handle
+# 常见使用模式
 
-A common pattern in Based is to use nested loop-until structures for triaging user input and collecting necessary information. Here's an example:
+以下是一些在 Based 中常见的使用模式示例。
+
+## 分流（Triage）和处理
+
+一个常见的模式是使用嵌套的 `loop-until` 来进行用户意图分流（triage）并收集所需信息。示例：
 
 ```python
 loop:
@@ -185,28 +191,28 @@ until "user mentions order":
     loop:
         res = talk("What is your order number?", True)
     until "user provides order number":
-        # Handle order-related query
+        # 处理与订单相关的请求
         return handle_order({"order_no": "order number from conversation"})
 until "user mentions return":
     loop:
         res = talk("What is the order number you want to return and what is the reason?", True)
     until "user provides return details":
-        # Handle return request
+        # 处理退货请求
         return process_return({"order_no": "order number from conversation", "reason": "reason from conversation"})
 until "general question":
-    # Handle general inquiries
+    # 处理常规咨询
     return handle_general_query(res)
 ```
 
-This pattern is useful when you need to:
+这种模式适用于：
 
-- Direct users to different handling paths based on their input
-- Extract specific information before proceeding with specialized handling
-- Maintain conversation context while switching between different handling modes
+- 根据用户输入跳转到不同的处理路径
+- 在继续执行专门处理逻辑之前，先从用户处收集特定信息
+- 在切换不同处理模式时保持对话上下文
 
-Sequential loop-untils
+## 顺序的 loop-until
 
-Another common pattern in Based is to use sequential loop-untils to gather information in a specific order. This is useful when you need to collect multiple pieces of information that build on each other. Here's an example:
+另一个常见模式是在 Based 中使用一系列按顺序的 loop-until，用于依次收集多条信息。示例：
 
 ```python
 loop:
@@ -226,112 +232,116 @@ until "user provides name":
             return setup_profile(name, age, contact)
 ```
 
-This pattern is particularly effective when:
+这种模式在以下情形中尤其有效：
 
-- You need to collect information in a specific sequence
-- Each piece of information depends on or builds upon previous responses
-- You want to maintain a natural conversation flow while gathering data
+- 需要按特定顺序收集信息
+- 每条信息依赖或基于之前的用户回答
+- 在获取多条信息的同时，仍然保证自然的对话流
 
-The important thing to keep in mind here is not oversplitting a single simple prompt. In the above example for example you would be able to colllect name, age and preferred contact method in a single agent and have an until that said `user provided all three of name, age and contact number`
-
-
-# Based Crash Course – Build Platform Agnostic Conversational Agents
-
-## Introduction
-Welcome to the **Based Crash Course**! This guide introduces you to **Based**, a powerful, domain-specific programming language designed to build platform agnostic conversational agents. Deploy conversational workflows on chat, voice, email, SMS, and more with ease, enabling seamless data exchange and a unified user experience across platforms.
+当然，如果信息量很小也不必过分拆分。可以在同一次对话中收集多条信息，然后用一个 `until` 在检测到所有信息都已收集完毕时再退出循环。
 
 ---
 
-## What Is Based?
-**Based** is a high-level AI instruction language crafted to design dynamic conversational agents that operate flawlessly across multiple communication channels. It provides developers with an elegant, high-level syntax to build interactive workflows quickly and reliably.
+# Based 快速入门 – 构建跨平台通用的对话代理
 
-### Key Features
-- **Intuitive and Expressive Syntax**: Develop complex conversational logic with clarity and brevity.  
-- **Specialized Constructs**: Utilize built-in keywords like `talk`, `loop`, `until`, and `ask` to manage conversation flow and state effortlessly.  
-- **Cross-Platform Flexibility**: Create agents deployable on chat, voice, email, SMS, and more—all while sharing data seamlessly across channels.
+## 介绍
+欢迎来到 **Based 快速入门**！本指南会向你介绍 **Based**——一门强大的领域专用编程语言，可用来构建跨平台的对话代理。你可以轻松地在聊天、语音、电子邮件、短信等渠道部署对话式流程，并在这些渠道间实现无缝数据交换及统一的用户体验。
 
 ---
 
-## Core Conversation Flow Constructs
-Based scripts use a trio of keywords to build interactive conversations:
+## 什么是 Based？
+**Based** 是一门高级 AI 指令语言，专注于设计 **可在多种通信渠道间无缝运转的动态对话代理**。它通过一种优雅、高抽象度的语法帮助开发者快速且可靠地构建交互式工作流。
 
-1. **`talk`**: Sends a message or prompt to the user and waits for a response. (If you specify `False` as the second argument, it waits for the user to send a message first.)
-2. **`loop`**: Begins a conversational block that allows for repeated prompting.
-3. **`until`**: Specifies the condition under which the loop should end.
+### 关键特性
+- **直观且富表现力的语法**：以更少代码实现更复杂的对话逻辑。  
+- **专门的结构**：利用 `talk`、`loop`、`until`、`ask` 等内置关键字轻松管理对话流程和状态。  
+- **跨平台灵活性**：可同时在聊天、语音、电子邮件、短信等渠道部署代理，并实现数据的无缝共享。
 
-In practice, the `talk` keyword is typically enclosed in a `loop`/`until` structure. This pattern keeps the conversation repeating until valid input is obtained.
+---
 
-### Example Usage
+## 核心对话流结构
+
+Based 脚本主要依赖以下三个关键字来构建交互式对话：
+
+1. **`talk`**：发送消息或提示给用户并等待回复。（若第二个参数设为 `False`，则会先等待用户发信息）  
+2. **`loop`**：开始一个可重复的对话块。  
+3. **`until`**：指定在满足何种条件时结束该 `loop` 块。
+
+在实际使用中，`talk` 通常被包裹在 `loop`/`until` 结构中。这样的设计可以让对话在满足条件前反复执行。
+
+### 示例用法
+
 ```text
 loop:
-    # Send a prompt to the user asking for their preferred contact method.
+    # 询问用户首选的联系方式
     response = talk(
         "Hi there! What's your preferred contact method (email, phone, or SMS)?",
         True,
-        {"preferred_contact": "email"} // Example default value
+        {"preferred_contact": "email"} // 提供示例默认值
     )
 until "User provides a valid contact method":
     contactInfo = response.ask(
         question="Extract and validate the contact method from the response.",
         example={"preferred_contact": "email"}
     )
-    # Validate the contact method; if invalid, the prompt repeats.
+    # 验证结果
     if contactInfo["preferred_contact"] not in ["email", "phone", "SMS"]:
-        print("Invalid contact method provided. Re-prompting...")
+        print("无效的联系方式。重新询问...")
     else:
-        print("Valid contact method received!")
+        print("已获得有效的联系方式！")
+```
 
 ```markdown
-# Based Language Fundamentals – Core Constructs Reference
+# Based 语言基础 – 核心结构参考
 
-Welcome to the **Based Language Fundamentals** guide. This reference document provides a comprehensive explanation of **Based**’s core language constructs, their declaration syntax, arguments, and practical usage examples. Understanding these fundamentals will enable you to build sophisticated conversational agents with precision and confidence.
-
----
-
-## Core Language Constructs
-
-Based is built around a set of specialized constructs designed specifically for conversational AI workflows. These constructs provide a high-level abstraction that makes it easy to build complex interactions without getting lost in implementation details.
+欢迎阅读 **Based 语言基础**指南。本参考文档详细说明了 **Based** 的核心语言结构、声明语法、参数及实际使用示例。熟悉这些基础概念，将帮助你更加自信且高效地构建强大的对话代理。
 
 ---
 
-## The `say` Function
+## 核心语言结构
 
-The `say` function generates a response from the AI to the user **without** expecting a reply. It’s typically used to provide information, instructions, or acknowledgments.
+Based 由一系列针对对话式 AI 工作流设计的专用结构组成。它们为构建复杂交互提供了高抽象度，确保不会在细节层面过度耗费精力。
 
-**Syntax:**
+---
+
+## `say` 函数
+
+`say` 函数会生成一段对用户的输出 **（不期待用户回复）**。常用来提供信息、指令或确认内容。
+
+**语法：**
 ```text
 say(message, exact=False, model=None)
 ```
 
-**Parameters**:
-- **message (string)**: The content to be processed and presented to the user  
-- **exact (boolean, optional)**: Controls how the message is processed  
-  - **True**: Outputs exactly what’s provided in the message parameter, verbatim  
-  - **False** (default): Allows the AI to rephrase the message while maintaining its meaning  
-- **model (string, optional)**: Specifies which AI model to use for processing the message (when `exact=False`)
+**参数**：
+- **message (string)**：要输出给用户的内容  
+- **exact (boolean, 可选)**：控制输出方式  
+  - **True**：输出内容与 `message` 完全相同  
+  - **False**（默认）：允许 AI 在语义一致的前提下对 `message` 进行润色  
+- **model (string, 可选)**：指定在 `exact=False` 时使用的 AI 模型
 
-**Return Value**:
-- Returns the response text, which can be stored in a variable for later use or simply executed for its side effect
+**返回值**：
+- 返回生成的文本，可存储在变量中，也可仅用作直接输出
 
-**Example**:
+**示例**：
 ```text
-# Greet the user with an exact message
+# 使用确切信息跟用户打招呼
 say("Welcome to BookBot! I'm here to help you find and reserve books.", exact=True)
 
-# Generate a dynamic welcome based on intent
+# 根据意图生成动态欢迎语
 say("Generate a friendly welcome for a user looking for book recommendations")
 
-# Store the response for later use
+# 存储回复以便后续使用
 intro = say("Introduce yourself as a helpful assistant", model="anthropic/claude-3.7-sonnet")
 ```
 
 ---
 
-## The `loop`, `talk`, and `until` Pattern
+## `loop`、`talk` 与 `until` 模式
 
-In Based, the `loop`, `talk`, and `until` constructs form an essential pattern that **must be used together**. This pattern creates interactive conversation flows that can repeat until specific conditions are met. The `talk` function is not meant to be used in isolation.
+在 Based 中，`loop`、`talk` 和 `until` 一起使用，是 **必须** 遵循的基础模式。它们构建了一个可交互的对话流程，一旦满足特定条件就可退出循环。需要注意的是，**`talk` 并不单独使用**。
 
-**Syntax:**
+**语法：**
 ```text
 loop:
     response = talk(
@@ -340,30 +350,29 @@ loop:
         default_values={},
         info={}
     )
-until "Description of the completion condition":
-    # Validation code that determines if the condition is met
-    # The loop continues until this code completes successfully
+until "对退出条件的描述":
+    # 决定是否满足退出条件的验证逻辑
+    # 如果条件未满足，则再次回到 loop 开始
 ```
 
-### Parameters for `talk`:
+### `talk` 的参数
 
-- **system_prompt (string)**: Instruction or prompt that guides the conversation
-- **first_prompt (boolean, optional)**: Controls conversation initiation  
-  - **True** (default): AI starts by sending the prompt message to the user  
-  - **False**: AI waits for the user to send a message first
-- **default_values (dict, optional)**: Example values to structure expected responses
-- **info (dict, optional)**: Additional context for the conversation
+- **system_prompt (string)**：指示或提示，指导对话内容
+- **first_prompt (boolean, 可选)**：控制对话谁先说话
+  - **True**（默认）：AI 先说
+  - **False**：先等待用户说
+- **default_values (dict, 可选)**：示例值，帮助规划期待的回复结构
+- **info (dict, 可选)**：提供给对话的额外上下文
 
-### The Loop-Until Pattern:
+### Loop-Until 模式
 
-1. The **`loop`** keyword begins a repeatable conversation block  
-2. The **`talk`** function within the loop handles the conversation exchange  
-3. The **`until`** clause specifies a condition (in natural language) under which the loop should end  
-4. The code block after **`until`** validates whether the condition has been met  
-5. If the condition is met (the code executes successfully), the loop exits  
-6. If the condition is not met, the loop repeats from the beginning
+1. **`loop`** 表示开始一个可重复的对话块  
+2. 在 `loop` 中使用 **`talk`** 向用户提出问题并接收回答  
+3. **`until`** 用自然语言描述在何种条件下结束循环  
+4. `until` 块中执行检查：若条件满足，则退出循环；若不满足，则回到 `loop` 重新执行  
+5. 如条件满足，则循环结束，继续向下执行
 
-**Example**:
+**示例**：
 ```text
 loop:
     book_preference = talk(
@@ -377,48 +386,48 @@ until "User provides a valid book genre and format":
         example={"genre": "mystery", "format": "paperback"}
     )
 
-    # Validate the genre and format
+    # 检验有效性
     if preference_data["genre"] not in ["mystery", "sci-fi", "romance", "non-fiction"]:
-        print("Invalid genre provided. Re-prompting...")
+        print("无效的类型。重新询问...")
         continue
 
     if preference_data["format"] not in ["paperback", "hardcover", "e-book", "audiobook"]:
-        print("Invalid format provided. Re-prompting...")
+        print("无效的格式。重新询问...")
         continue
 
-    # If we reach here, both genre and format are valid
-    print("Valid preferences received!")
+    # 若执行到这里，表示 genre 和 format 都有效
+    print("成功获取偏好！")
 ```
 
 ---
 
-## Data Processing Methods
+## 数据处理方法
 
-Based provides powerful methods to **transform and extract information** from data objects. These methods can be applied to any data object, not just conversation responses.
+Based 为 **转换或提取数据** 提供了强大的方法，且可用于任何数据对象，不局限于对话响应。
 
 ---
 
-### The `.ask` Method
+### `.ask` 方法
 
-The `.ask` method extracts structured data from any data object, transforming unstructured content into well-formed data that can be used programmatically. This method can be used with API responses, conversation results, or any other data.
+`.ask` 方法可从任意数据对象中提取结构化数据，将无结构信息转换为可编程使用的格式。可用于 API 响应、对话结果或任何其他数据。
 
-**Syntax:**
+**语法：**
 ```text
 data_object.ask(question, example=None, schema=None, model=None)
 ```
 
-**Parameters**:
-- **question (string)**: Instruction for extracting specific information from the data
-- **example (dict, optional)**: Example object showing the expected output format
-- **schema (dict, optional)**: JSON schema defining the expected structure
-- **model (string, optional)**: AI model to use for extraction
+**参数**：
+- **question (string)**：关于所需信息的提问  
+- **example (dict, 可选)**：输出格式的示例  
+- **schema (dict, 可选)**：若要基于 JSON schema，可以在此提供  
+- **model (string, 可选)**：执行提取操作时所用的 AI 模型
 
-**Return Value**:
-- Returns structured data according to the example or schema provided
+**返回值**：
+- 返回与 `example` 或 `schema` 相符合的结构化数据
 
-**Example**:
+**示例**：
 ```text
-# Extract structured book preferences from a conversation response
+# 从对话回复中提取用户阅读偏好
 preferences = response.ask(
     question="Extract the user's preferred book genre, format, and any specific authors they mentioned.",
     example={
@@ -428,7 +437,7 @@ preferences = response.ask(
     }
 )
 
-# Use .ask on an API response
+# 对 API 响应使用 .ask
 api_results = api.get_req(
     url='https://bookstore-api.example.com/books',
     headers={'authorization': 'Bearer ' + auth_token},
@@ -441,31 +450,31 @@ api_results = api.get_req(
 
 ---
 
-### The `.summarize` Method
+### `.summarize` 方法
 
-The `.summarize` method creates a concise summary of the information contained in any data object. This is particularly useful for **large text blocks or complex data structures**.
+`.summarize` 用于对任意数据对象进行简要概括，适用于文本块较大或数据结构复杂的场景。
 
-**Syntax:**
+**语法：**
 ```text
 data_object.summarize(prompt=None, model=None)
 ```
 
-**Parameters**:
-- **prompt (string, optional)**: Specific instruction for creating the summary
-- **model (string, optional)**: AI model to use for summarization
+**参数**：
+- **prompt (string, 可选)**：可选地指定概括时的提要  
+- **model (string, 可选)**：用于生成摘要的 AI 模型
 
-**Return Value**:
-- Returns a string containing the summary
+**返回值**：
+- 返回简明扼要的字符串摘要
 
-**Example**:
+**示例**：
 ```text
-# Summarize a lengthy document
+# 概括一篇冗长报告
 document_content = document.read(url="https://example.com/lengthy-report.pdf")
 summary = document_content.summarize(
     prompt="Provide a 3-paragraph summary of this financial report, focusing on key metrics and projections."
 )
 
-# Create a concise summary of API results
+# 从搜索结果提取要点
 search_results = google_search.search(query="latest developments in quantum computing")
 key_points = search_results.summarize(
     prompt="Extract the 5 most significant recent breakthroughs in quantum computing mentioned in these results."
@@ -474,14 +483,14 @@ key_points = search_results.summarize(
 
 ---
 
-## Advanced Patterns
+## 高级模式
 
-### Multiple `until` Statements
+### 多个 `until` 语句
 
-Based allows for sophisticated conversation flows by supporting **multiple `until` statements**. Each `until` block represents a different condition and can trigger different handling paths.
+Based 支持在同一个 `loop` 中使用 **多个 `until`**，从而实现更复杂的对话流。每个 `until` 块对应一个条件并触发各自的处理流程。
 
 ```text
-# Multi-condition conversation handler example
+# 示例：多条件对话处理
 loop:
     response = talk(
         "Welcome to our customer service bot. What can I help you with today?",
@@ -494,7 +503,7 @@ until "User wants to check order status":
     )
 
     if order_query["is_order_status"]:
-        # Handle order status request
+        # 处理查看订单状态
         if "order_number" in order_query and order_query["order_number"]:
             order_details = get_order_details(order_query["order_number"])
             say(f"Your order {order_query['order_number']} is {order_details['status']}. Expected delivery: {order_details['delivery_date']}", exact=True)
@@ -508,9 +517,9 @@ until "User wants to make a return":
     )
 
     if return_query["is_return"]:
-        # Handle return request
+        # 处理退货
         say("I can help you process a return. Let me guide you through our return policy and steps.", exact=True)
-        # Additional return handling logic
+        # 退货处理逻辑
         break
 until "User wants to speak to human agent":
     agent_query = response.ask(
@@ -526,12 +535,12 @@ until "User wants to speak to human agent":
 
 ---
 
-### Conditional Flow Control
+### 条件性流程控制
 
-Based scripts can implement **conditional flow control** using standard Python syntax, allowing for dynamic conversation paths based on user responses.
+可以结合标准的 Python 语法实现 **条件性流程控制**，从而依据用户回复动态地改变对话走向。
 
 ```text
-# Determine recommendation approach based on user expertise and preferences
+# 根据用户对该类型的熟悉度和偏好来决定推荐方案
 loop:
     expertise_response = talk("How familiar are you with this book genre?", True)
 until "User indicates their expertise level and reading preferences":
@@ -544,7 +553,7 @@ until "User indicates their expertise level and reading preferences":
         }
     )
 
-    # Create a personalized recommendation strategy
+    # 个性化推荐方案
     if user_profile["level"] == "beginner":
         if user_profile["prefers_series"]:
             recommendations = get_beginner_series_recommendations(preferences["genre"])
@@ -558,51 +567,51 @@ until "User indicates their expertise level and reading preferences":
         else:
             recommendations = get_intermediate_short_recommendations(preferences["genre"])
     else:
-        # Expert reader
+        # 高级读者
         recommendations = get_expert_recommendations(preferences["genre"])
         say(f"For an expert reader like yourself, these critically acclaimed {preferences['genre']} books offer complex narratives:", exact=True)
 
-    # Display the recommendations
+    # 展示前三个推荐
     for i, book in enumerate(recommendations[:3]):
         say(f"{i+1}. '{book['title']}' by {book['author']} - {book['description']}", exact=True)
 ```
 
 ---
 
-## Platform-Specific Functions
+## 面向具体平台的函数
 
-Based supports different deployment platforms (**chat, voice, email, SMS**) and provides specialized functions for each platform. These functions allow you to take advantage of **platform-specific capabilities**.
+Based 支持在 **聊天、语音、电子邮件、短信** 等多个平台上部署，同时提供了相应的函数以利用各自平台的特性。
 
 ---
 
-### Voice Deployment Functions
+### 语音部署函数
 
-When your Based agent is deployed for **voice conversations**, you can use these special functions to control call flow.
+当你的 Based 代理部署在 **语音通话** 场景时，可使用以下函数：
 
-1. **`transfer_call(phone_number)`**: Transfers the current call to another phone number.
+1. **`transfer_call(phone_number)`**：将当前通话转接到另一个号码
    ```text
-   # Transfer call to customer support if user requests it
+   # 若用户要求转人工
    if user_request["needs_human_support"]:
        say("I'll transfer you to our customer support team right away.", exact=True)
        transfer_call("+1-800-123-4567")
    ```
 
-2. **`hangup()`**: Ends the current call.
+2. **`hangup()`**：结束当前电话
    ```text
-   # End call after completing the transaction
+   # 在完成订单后结束通话
    say("Thank you for your order! Your confirmation number is ABC123. Have a great day!", exact=True)
    hangup()
    ```
 
 ---
 
-### SMS Deployment Functions
+### 短信（SMS）部署函数
 
-For **SMS deployments**, Based provides specialized functions for text messaging.
+针对 **短信（SMS）** 部署，Based 提供以下特殊函数：
 
-- **`send_image(url)`**: Sends an image in the conversation.
+- **`send_image(url)`**：在会话中发送一张图片
   ```text
-  # Send product image in SMS conversation
+  # 在短信会话中发送产品图片
   product_details = get_product_info("ABC123")
   say(f"Here's the {product_details['name']} you inquired about:", exact=True)
   send_image(product_details["image_url"])
@@ -610,19 +619,19 @@ For **SMS deployments**, Based provides specialized functions for text messaging
 
 ---
 
-## Full Example: Book Recommendation Agent
+## 完整示例：图书推荐代理
 
-Here’s a complete example that demonstrates the various language constructs working together, including **multiple `until` statements**:
+下面是一个更完整的示例，它展示了多种 Based 语言结构如何协同工作，以及 **多个 `until`** 的使用：
 
 ```text
 state = {}
 meta_prompt = "You're a book recommendation assistant helping users find their next great read."
 res = say("Hello! I'm BookBot, your personal book recommendation assistant.", exact=True)
 
-# Introduce the service and set expectations
+# 简短介绍服务并告知用户期望
 say("I can help you find books based on your preferences, including genre, format, and reading level.")
 
-# Collect initial user preferences with multiple until paths
+# 使用多个 until 分支来收集用户最初需求
 loop:
     initial_response = talk(
         f"{meta_prompt} Ask the user what they're looking for today, offering to recommend books, find new releases, or check book availability.",
@@ -635,10 +644,10 @@ until "User wants book recommendations":
     )
 
     if recommendation_request["wants_recommendations"]:
-        # Handle recommendation path
+        # 处理推荐流程
         state["intent"] = "recommendations"
 
-        # Collect genre preferences
+        # 收集类别偏好
         loop:
             genre_response = talk(
                 "What genre of books do you enjoy reading?",
@@ -655,7 +664,7 @@ until "User wants book recommendations":
                 state["preferences"] = preferences
                 break
 
-        # Generate recommendations
+        # 调用 API 获取推荐
         recommendations = api.get_req(
             url='https://bookstore-api.example.com/recommendations',
             params=state["preferences"]
@@ -664,7 +673,7 @@ until "User wants book recommendations":
             example={"books": [{"title": "Book Title", "author": "Author Name", "description": "Brief description"}]}
         )
 
-        # Present recommendations
+        # 呈现推荐结果
         say(f"Based on your interest in {state['preferences']['genre']} books, here are 3 titles I think you'll love:", exact=True)
         for i, book in enumerate(recommendations["books"]):
             say(f"{i+1}. '{book['title']}' by {book['author']}: {book['description']}", exact=True)
@@ -676,11 +685,11 @@ until "User wants to check new releases":
     )
 
     if new_release_request["wants_new_releases"]:
-        # Handle new releases path
+        # 处理新书查询
         state["intent"] = "new_releases"
         genre = new_release_request.get("genre", "")
 
-        # Get new releases, optionally filtered by genre
+        # 获取新发行列表，可选按类别过滤
         new_releases = api.get_req(
             url='https://bookstore-api.example.com/new-releases',
             params={"genre": genre} if genre else {}
@@ -689,7 +698,7 @@ until "User wants to check new releases":
             example={"books": [{"title": "New Book", "author": "Author Name", "release_date": "2023-10-15"}]}
         )
 
-        # Present new releases
+        # 呈现最新出版书单
         header = f"Here are the latest releases in {genre}:" if genre else "Here are the latest book releases:"
         say(header, exact=True)
         for i, book in enumerate(new_releases["books"]):
@@ -702,7 +711,7 @@ until "User wants to check book availability":
     )
 
     if availability_request["checking_availability"]:
-        # Handle availability check path
+        # 处理可用性查询
         state["intent"] = "check_availability"
 
         book_info = {}
@@ -711,7 +720,7 @@ until "User wants to check book availability":
         if "author" in availability_request:
             book_info["author"] = availability_request["author"]
 
-        # If we have complete information, check availability
+        # 如果信息完整，直接检查可用性
         if "title" in book_info and "author" in book_info:
             availability = check_book_availability(book_info["title"], book_info["author"])
             if availability["available"]:
@@ -719,7 +728,7 @@ until "User wants to check book availability":
             else:
                 say(f"I'm sorry, '{book_info['title']}' by {book_info['author']} is currently unavailable. Would you like me to notify you when it becomes available?", exact=True)
         else:
-            # Need more information
+            # 需要更多信息
             loop:
                 book_details_response = talk(
                     "I'd be happy to check book availability. Could you please provide the book title and author?",
@@ -740,19 +749,19 @@ until "User wants to check book availability":
                     break
         break
 
-# Conversation wrap-up
+# 对话收尾
 say("Is there anything else I can help you with today?", exact=True)
 ```
 
 ---
 
-## Conclusion
+## 总结
 
-The **Based language** provides a powerful yet intuitive framework for building conversational agents. By mastering the core constructs—particularly the essential **`loop-talk-until`** pattern—you can create sophisticated conversation flows that handle complex interactions while maintaining readability and maintainability.
+**Based 语言** 提供了一个强大而直观的框架来构建对话式代理。只要掌握了最基本也最重要的 **`loop-talk-until`** 模式，你就能打造灵活且强大的对话流程，同时保持代码可读性与可维护性。
 
-Remember that **Based** is designed to be **declarative**, allowing you to focus on the *“what”* rather than the *“how”* of conversational AI. This approach dramatically reduces the amount of code needed to create powerful agents while increasing reliability and ease of maintenance.
+请记住，**Based** 旨在 **声明式** 地描述“想要实现什么”，而不必过于纠结“如何实现”。此方法可显著减少代码量并提高系统可靠性和可维护性。
 
-The combination of the core language constructs with **platform-specific functions** allows you to build agents that take full advantage of each deployment platform’s unique capabilities while maintaining a consistent codebase and user experience. 
+当结合使用 **针对各平台的特殊函数** 时，你既能充分发挥每个平台（如语音、短信等）的能力，又可保持统一的代码库和用户体验。  
 ```
 
 """
@@ -955,4 +964,17 @@ VALIDATION_FUNCTION = """def validate_based_diff(diff: str, current_content: str
         return result
     except Exception as e:
         return {"status": "error", "error": f"External validation error: {str(e)}"}
+"""
+
+USER_MESSAGE_BASED_GUIDELINES = """
+To ensure that conversation flows adhere strictly to our guidelines, the system prompt must now enforce the use of the loop until syntax for controlling dialogue transitions. Every conversational cycle must consist of a single 'talk' call, immediately followed by a corresponding 'until' block that evaluates exit conditions and transitions to the next state. You are allowed multiple until blocks but only one loop.For example:
+
+loop until (the response matches the expected intent) {
+    talk("Hello, thank you for calling. How may I assist you today?");
+    // Evaluate the user’s reply and, if it meets the required condition, proceed; otherwise, remain in the loop until it does.
+}
+
+This structure clearly separates the moment of interaction (the talk call) from exit and transition checks in the 'until' block. The agent’s purpose is to ensure clarity in conversation, where each loop precisely handles one part of the interaction, and any subsequent action or state change is determined exclusively by the corresponding 'until' clause. The conversation style should always remain friendly and instructional, guiding the user through step-by-step queries until a complete response is received.
+
+Agents must document each loop with comments that explain the intended transition. For instance, when waiting for confirmation of user details, the 'until' construct should explicitly define that the loop only terminates when the user confirms the details. This consistent use of the loop until syntax combats any drift towards traditional while loops, thereby enforcing a well-structured, repeatable, and transparent conversation flow. Deviations from this pattern should be immediately corrected to align with our mandated design principles.
 """
