@@ -68,6 +68,11 @@ def build_initial_payload(db: Session, chat_id: str) -> dict:
             except Exception:
                 parsed_text = ""
             parsed_files[cfile.id] = parsed_text
+            parsed_files[cfile.id] = parsed_text
+            print("\n\n\n\n\n\n\n\n\n\n")
+            print("Parsed FILE: ", cfile.filename)
+            print(parsed_files[cfile.id])
+            print("\n\n\n\n\n\n\n\n\n\n")
         elif fname.endswith(".pdf"):
             try:
                 with open(cfile.path, "rb") as f:
@@ -80,6 +85,10 @@ def build_initial_payload(db: Session, chat_id: str) -> dict:
             except Exception:
                 parsed_text = "[Error parsing PDF]"
             parsed_files[cfile.id] = parsed_text
+            print("\n\n\n\n\n\n\n\n\n\n")
+            print("Parsed FILE: ", cfile.filename)
+            print(parsed_files[cfile.id])
+            print("\n\n\n\n\n\n\n\n\n\n")
 
     chat_files_text_objs = []
     chat_files_based_objs = []
