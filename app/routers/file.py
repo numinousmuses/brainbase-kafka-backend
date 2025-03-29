@@ -10,7 +10,9 @@ from app.core.database import get_db
 from app.models.file import File as FileModel  # Workspace file model
 from app.models.chat import Chat
 from app.models.chat_file import ChatFile
-from app.schemas.file import FileUploadResponse, FileRenameResponse
+from app.schemas.file import FileUploadResponse, FileRenameResponse, UploadedFileInfo
+import PyPDF2
+
 
 router = APIRouter()
 
@@ -18,105 +20,240 @@ router = APIRouter()
 UPLOAD_DIRECTORY = "uploads/files"
 os.makedirs(UPLOAD_DIRECTORY, exist_ok=True)
 
+def detect_file_type_and_language(filename: str, content: bytes):
+    """
+    Simple helper to guess file type and language from filename and/or content.
+    Extend this logic as needed for your own use cases.
+    """
+    ext = os.path.splitext(filename)[1].lower()
+
+    # Default type & language
+    file_type = "other"
+    language = None  # e.g., only set if type == "code"
+
+    # Basic rules by extension
+    if ext in [".py", ".js", ".ts", ".java", ".cpp", ".c", ".cs", ".rb", ".go", ".rs"]:
+        file_type = "code"
+        # A quick guess at language based on extension
+        if ext == ".py":
+            language = "python"
+        elif ext in [".js", ".ts"]:
+            language = "javascript/typescript"
+        elif ext == ".java":
+            language = "java"
+        elif ext in [".cpp", ".c"]:
+            language = "c/cpp"
+        elif ext == ".cs":
+            language = "csharp"
+        elif ext == ".rb":
+            language = "ruby"
+        elif ext == ".go":
+            language = "go"
+        elif ext == ".rs":
+            language = "rust"
+
+    elif ext == ".pdf":
+        file_type = "pdf"
+    elif ext == ".csv":
+        file_type = "csv"
+    elif ext in [".md", ".markdown"]:
+        file_type = "markdown"
+    elif ext in [".jpg", ".jpeg", ".png", ".gif", ".bmp"]:
+        file_type = "image"
+    elif ext in [".exe", ".bin", ".dll"]:
+        file_type = "computer"
+
+    return file_type, language
+
+
 @router.post("/upload", response_model=FileUploadResponse)
 async def upload_file(
     target_id: str = Form(...),
     is_chat: bool = Form(...),
     files: Optional[List[UploadFile]] = File(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    s3_urls: Optional[List[str]] = Form(None),
 ):
     """
     Upload files to either a workspace or a chat.
-    
-    Parameters:
-      - **user_id:** The ID of the user uploading the file.
-      - **target_id:** If uploading to a workspace, this is the workspace ID.
-                      If uploading to a chat, this is the chat ID.
-      - **is_chat:** Boolean flag. If true, the file is added to both the chat and its workspace.
-      - **files:** List of file uploads.
-    
-    Processing:
-      - Saves each file once on disk.
-      - If **is_chat** is false:
-          - Creates a record in the File table (linked to the workspace).
-      - If **is_chat** is true:
-          - Looks up the Chat (to retrieve its workspace ID).
-          - Creates a record in the ChatFile table (for the chat) 
-            and in the File table (for the workspace) using the same file ID.
-    
+    ...
     Returns:
-      - A list of file IDs for the uploaded files.
+      A list of file metadata objects with:
+         - id
+         - name
+         - content
+         - language
+         - type
+         - url
     """
     if not files:
         raise HTTPException(status_code=400, detail="No files uploaded.")
-    
-    uploaded_file_ids = []
-    
+
+    uploaded_files_info = []
+
+    # --------------------
+    # 1) If we're uploading to a Chat
+    # --------------------
     if is_chat:
-        # Look up the chat record.
+        print("Uploading to chat...")
         chat = db.query(Chat).filter(Chat.id == target_id).first()
+        print("Chat:", chat)
         if not chat:
             raise HTTPException(status_code=404, detail="Chat not found.")
-        # Retrieve the workspace ID from the chat.
         workspace_id = chat.workspace_id
-        
+
         for upload in files:
             file_id = str(uuid4())
             unique_filename = f"{file_id}_{upload.filename}"
             file_path = os.path.join(UPLOAD_DIRECTORY, unique_filename)
-            
-            # Save the file on disk.
+
+            # Read the file contents (for small files; handle large files carefully)
+            file_bytes = await upload.read()
+
+            # Save to disk
             with open(file_path, "wb") as buffer:
-                buffer.write(await upload.read())
-            
-            # Create a record in the File table for the workspace.
+                buffer.write(file_bytes)
+
+            # Create DB records
             new_file = FileModel(
                 id=file_id,
                 filename=upload.filename,
                 path=file_path,
-                workspace_id=workspace_id
+                workspace_id=workspace_id,
+                s3_url=s3_urls[files.index(upload)]
             )
             db.add(new_file)
-            
-            # Create a record in the ChatFile table for the chat.
+
             new_chat_file = ChatFile(
                 id=file_id,
                 filename=upload.filename,
                 path=file_path,
-                chat_id=chat.id
+                chat_id=chat.id,
+                s3_url=s3_urls[files.index(upload)]
             )
             db.add(new_chat_file)
-            
-            uploaded_file_ids.append(file_id)
-    
+
+            # Infer type/language
+            file_type, language = detect_file_type_and_language(upload.filename, file_bytes)
+
+            # For textual code-like files, decode content
+            # If you want to limit content size, you could slice or store partial
+            decoded_content = None
+            if file_type in ["code", "csv", "markdown"]:
+                try:
+                    decoded_content = file_bytes.decode("utf-8", errors="replace")
+                except:
+                    decoded_content = None
+            elif file_type == "pdf":
+                print("\n\n\n\n\n\n\n\n")
+                print("Parsing PDF...")
+                print("\n\n\n\n\n\n\n\n")
+                try:
+                    from io import BytesIO
+                    pdf_stream = BytesIO(file_bytes)
+                    reader = PyPDF2.PdfReader(pdf_stream)
+                    pdf_text = ""
+                    for page in reader.pages:
+                        text = page.extract_text()
+                        if text:
+                            pdf_text += text
+                    decoded_content = pdf_text
+                    print("\n\n\n\n\n\n\n\n")
+                    print("PDF TEXT")
+                    print(decoded_content)
+                    print("\n\n\n\n\n\n\n\n")
+                except Exception:
+                    decoded_content = "[Error parsing PDF]"
+
+            # Build the file info object
+            file_info = UploadedFileInfo(
+                id=file_id,
+                name=upload.filename,
+                content=decoded_content,
+                language=language,
+                type=file_type,
+                url=s3_urls[files.index(upload)]
+            )
+            uploaded_files_info.append(file_info)
+
+    # --------------------
+    # 2) If we're uploading directly to a Workspace
+    # --------------------
     else:
-        # Uploading directly to a workspace.
         from app.models.workspace import Workspace
         workspace = db.query(Workspace).filter(Workspace.id == target_id).first()
         if not workspace:
             raise HTTPException(status_code=404, detail="Workspace not found.")
-        
+
         for upload in files:
             file_id = str(uuid4())
             unique_filename = f"{file_id}_{upload.filename}"
             file_path = os.path.join(UPLOAD_DIRECTORY, unique_filename)
-            
+
+            # Read the file contents
+            file_bytes = await upload.read()
+
+            # Save to disk
             with open(file_path, "wb") as buffer:
-                buffer.write(await upload.read())
-            
+                buffer.write(file_bytes)
+
+            # Create a FileModel record
             new_file = FileModel(
                 id=file_id,
                 filename=upload.filename,
                 path=file_path,
-                workspace_id=workspace.id
+                workspace_id=workspace.id,
+                s3_url=s3_urls[files.index(upload)]
             )
             db.add(new_file)
-            
-            uploaded_file_ids.append(file_id)
-    
-    db.commit()
-    return FileUploadResponse(files=uploaded_file_ids)
 
+            # Infer type/language
+            file_type, language = detect_file_type_and_language(upload.filename, file_bytes)
+
+            # Decode content if it's something textual
+            decoded_content = None
+            if file_type in ["code", "csv", "markdown"]:
+                try:
+                    decoded_content = file_bytes.decode("utf-8", errors="replace")
+                except:
+                    decoded_content = None
+            elif file_type == "pdf":
+                print("\n\n\n\n\n\n\n\n")
+                print("Parsing PDF...")
+                print("\n\n\n\n\n\n\n\n")
+                try:
+                    from io import BytesIO
+                    pdf_stream = BytesIO(file_bytes)
+                    reader = PyPDF2.PdfReader(pdf_stream)
+                    pdf_text = ""
+                    for page in reader.pages:
+                        text = page.extract_text()
+                        if text:
+                            pdf_text += text
+                    decoded_content = pdf_text
+                    print("\n\n\n\n\n\n\n\n")
+                    print("PDF TEXT")
+                    print(decoded_content)
+                    print("\n\n\n\n\n\n\n\n")
+                except Exception:
+                    decoded_content = "[Error parsing PDF]"
+
+            # Build the file info object
+            file_info = UploadedFileInfo(
+                id=file_id,
+                name=upload.filename,
+                content=decoded_content,
+                language=language,
+                type=file_type,
+                url=f"/{UPLOAD_DIRECTORY}/{unique_filename}"
+            )
+            uploaded_files_info.append(file_info)
+
+    # Commit DB changes
+    db.commit()
+
+    # Return all file objects in a single response
+    return FileUploadResponse(files=uploaded_files_info)
 
 @router.delete("/delete/{file_id}")
 def delete_file(file_id: str, db: Session = Depends(get_db)):

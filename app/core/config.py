@@ -1,4 +1,7 @@
 # app/core/config.py
+import PyPDF2
+from io import BytesIO
+import os
 
 DATABASE_URL = "sqlite:///./my_database.db" 
 
@@ -1821,3 +1824,54 @@ api.post_req({
 })"""
     }
 ]
+
+def detect_file_type(ext: str) -> str:
+    # Basic classification by extension
+    if ext in [".jpg", ".jpeg", ".png", ".gif", ".bmp"]:
+        return "image"
+    elif ext == ".pdf":
+        return "pdf"
+    elif ext == ".csv":
+        return "csv"
+    elif ext in [".md", ".markdown"]:
+        return "markdown"
+    elif ext in [".py", ".js", ".ts", ".java", ".cpp", ".c", ".cs", ".rb", ".go", ".rs"]:
+        return "code"
+    elif ext in [".exe", ".bin", ".dll"]:
+        return "computer"
+    else:
+        return "other"
+    
+
+
+def parse_file_content(file_path: str, file_type: str) -> str:
+    """
+    Read and parse file content from disk for code/csv/markdown/pdf.
+    For images or 'other', we return empty content.
+    """
+    if not os.path.exists(file_path):
+        return ""
+
+    if file_type in ["code", "csv", "markdown", "based"]:
+        # Read as text
+        try:
+            with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+                return f.read()
+        except:
+            return ""
+
+    elif file_type == "pdf":
+        try:
+            with open(file_path, "rb") as f:
+                reader = PyPDF2.PdfReader(f)
+                pdf_text = ""
+                for page in reader.pages:
+                    text = page.extract_text()
+                    if text:
+                        pdf_text += text
+            return pdf_text
+        except:
+            return "[Error parsing PDF]"
+
+    # If image, 'computer', or other, we don't parse text
+    return ""

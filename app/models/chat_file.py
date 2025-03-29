@@ -10,6 +10,7 @@ class ChatFile(Base):
     filename = Column(String, nullable=False)
     path = Column(String, nullable=False)  # Local filesystem path for the chat-specific file
     chat_id = Column(String, ForeignKey("chats.id"), nullable=False)
+    s3_url = Column(String, nullable=True)
     
     # Relationships
     chat = relationship("Chat", back_populates="chat_files")

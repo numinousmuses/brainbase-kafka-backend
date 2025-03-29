@@ -217,6 +217,9 @@ async def handle_new_message_action(
 
         await websocket.send_json({
             "action": "agent_response",
+            "type": "file",
+            "id": new_based_file_id,
+            "content": file_content_response,
             "message": agent_response,
             "block": new_convo_block_serializable
         })

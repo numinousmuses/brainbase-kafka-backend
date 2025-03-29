@@ -208,7 +208,7 @@ def _generate_whole_based_file(
     # Build the system prompt
      # Build the system prompt
     json_format_instructions = (
-        "Return a JSON object in the following format: Your text file must begin with a based loop block, and have one or more until blocks."
+        "Return a JSON object in the following format: Your text file must begin with a based loop block, and have one or more until blocks. The filename must include `.based`"
         "{ \"type\": \"based\", \"filename\": <string>, \"text\": <string> }."
     )
     generation_prompt = (

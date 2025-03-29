@@ -1,6 +1,6 @@
 # /schemas/ws.py
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 
 class ChatMessage(BaseModel):
     role: str
@@ -29,13 +29,23 @@ class WorkspaceFile(BaseModel):
     file_id: str
     name: str
 
+class ChatFileItem(BaseModel):
+    id: str
+    name: str
+    content: Optional[str]
+    language: Optional[str]
+    type: str  # "code" | "pdf" | "csv" | ...
+    url: str
+
 class WsInitialPayload(BaseModel):
     chat_id: str
     chat_name: str
     conversation: List[ChatMessage]
-    chat_files_text: List[ChatFileText]
+    # chat_files_text: List[ChatFileText]
     chat_files_based: List[ChatFileBased]
-    workspace_files: List[WorkspaceFile]
+    # workspace_files: List[WorkspaceFile]
+    chat_files: Optional[List[ChatFileItem]]
     workspace_id: str
     models: List[str]
     initial: bool
+

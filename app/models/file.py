@@ -10,6 +10,7 @@ class File(Base):
     filename = Column(String, nullable=False)
     path = Column(String, nullable=False)  # Local filesystem path
     workspace_id = Column(String, ForeignKey("workspaces.id"), nullable=False)
+    s3_url = Column(String, nullable=True)
     
     # Relationship
     workspace = relationship("Workspace", back_populates="files")

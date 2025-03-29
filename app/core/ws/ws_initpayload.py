@@ -12,7 +12,8 @@ from app.schemas.ws import (
     ChatFileText,
     ChatFileBased,
     ChatFileBasedVersion,
-    WorkspaceFile
+    WorkspaceFile,
+    ChatFileItem
 )
 from app.models.chat import Chat
 from app.models.chat_file import ChatFile
@@ -21,6 +22,31 @@ from app.models.chat_file_version import ChatFileVersion
 from app.models.file import File as FileModel
 from app.models.model import Model as ModelModel
 import app.core.unifieddiff as unifieddiff
+from app.core.config import parse_file_content
+
+def detect_file_type(filename: str) -> str:
+    """
+    Basic extension-based file type classification.
+    Returns one of: 
+      "code", "pdf", "csv", "markdown", "computer", "image", "based", or "other"
+    """
+    ext = filename.lower().rsplit(".", 1)[-1]
+    if ext in ["py", "js", "ts", "java", "cpp", "c", "cs", "rb", "go", "rs"]:
+        return "code"
+    elif ext == "pdf":
+        return "pdf"
+    elif ext == "csv":
+        return "csv"
+    elif ext in ["md", "markdown"]:
+        return "markdown"
+    elif ext in ["jpg", "jpeg", "png", "gif", "bmp", "webp"]:
+        return "image"
+    elif ext in ["exe", "bin", "dll"]:
+        return "computer"
+    elif ext == "based":
+        return "based"
+    else:
+        return "other"
 
 
 def build_initial_payload(db: Session, chat_id: str) -> dict:
@@ -57,40 +83,52 @@ def build_initial_payload(db: Session, chat_id: str) -> dict:
     # 3) Load and partition chat files
     chat_files = db.query(ChatFile).filter(ChatFile.chat_id == chat.id).all()
 
-    # We'll parse .txt/.pdf files to store their text, if needed
-    parsed_files = {}
-    for cfile in chat_files:
-        fname = cfile.filename.lower()
-        if fname.endswith(".txt"):
-            try:
-                with open(cfile.path, "r", encoding="utf-8") as f:
-                    parsed_text = f.read()
-            except Exception:
-                parsed_text = ""
-            parsed_files[cfile.id] = parsed_text
-            parsed_files[cfile.id] = parsed_text
-            print("\n\n\n\n\n\n\n\n\n\n")
-            print("Parsed FILE: ", cfile.filename)
-            print(parsed_files[cfile.id])
-            print("\n\n\n\n\n\n\n\n\n\n")
-        elif fname.endswith(".pdf"):
-            try:
-                with open(cfile.path, "rb") as f:
-                    reader = PyPDF2.PdfReader(f)
-                    parsed_text = ""
-                    for page in reader.pages:
-                        text = page.extract_text()
-                        if text:
-                            parsed_text += text
-            except Exception:
-                parsed_text = "[Error parsing PDF]"
-            parsed_files[cfile.id] = parsed_text
-            print("\n\n\n\n\n\n\n\n\n\n")
-            print("Parsed FILE: ", cfile.filename)
-            print(parsed_files[cfile.id])
-            print("\n\n\n\n\n\n\n\n\n\n")
+    # 4) Create a single list of ChatFileItem
+    chat_files_list = []
 
-    chat_files_text_objs = []
+    for cfile in chat_files:
+        # Step A: detect file type
+        file_type = detect_file_type(cfile.filename)
+
+        # Step B: parse textual content if needed
+        file_content = ""
+        if file_type in ["code", "pdf", "csv", "markdown"]:
+            file_content = parse_file_content(cfile.path, file_type)
+        elif file_type == "based":
+            versions = (
+                    db.query(ChatFileVersion)
+                    .filter(ChatFileVersion.chat_file_id == cfile.id)
+                    .order_by(ChatFileVersion.timestamp)
+                    .all()
+                )
+            if versions:
+                latest_version = versions[-1]
+                file_content = latest_version.content
+                
+
+        # Step C: Build the file URL – e.g.:
+        url = f"/uploads/files/{cfile.id}_{cfile.filename}" if not cfile.s3_url else cfile.s3_url
+
+        # Step D: For code, guess a language from extension or store None
+        # you can do that inline or have a detect_file_type_and_language
+        language = None
+        if file_type == "code":
+            ext = cfile.filename.lower().rsplit(".", 1)[-1]
+            if ext == "py":
+                language = "python"
+            # etc.
+
+        # Step E: Build ChatFileItem
+        new_item = {
+            "id": cfile.id,
+            "name": cfile.filename,
+            "content": file_content,
+            "language": language,
+            "type": file_type,
+            "url": url
+        }
+        chat_files_list.append(new_item)
+
     chat_files_based_objs = []
 
     for cfile in chat_files:
@@ -130,35 +168,11 @@ def build_initial_payload(db: Session, chat_id: str) -> dict:
                 type="based"
             )
             chat_files_based_objs.append(cfile_based)
-        else:
-            # non-based file
-            if ext in ["jpg", "jpeg", "png", "gif"]:
-                file_type = "image"
-                content = cfile.path  # image path
-            else:
-                file_type = "text"
-                content = parsed_files.get(cfile.id, "")
 
-            cfile_text = ChatFileText(
-                file_id=cfile.id,
-                name=cfile.filename,
-                content=content,
-                type=file_type
-            )
-            chat_files_text_objs.append(cfile_text)
-
-    # 4) Load workspace files not attached to this chat & not .based
-    workspace_files_all = db.query(FileModel).filter(FileModel.workspace_id == chat.workspace_id).all()
-    chat_file_ids = {cf.id for cf in chat_files}
-    workspace_files_objs = []
-    for wf in workspace_files_all:
-        if wf.id not in chat_file_ids and not wf.filename.lower().endswith(".based"):
-            workspace_files_objs.append(
-                WorkspaceFile(
-                    file_id=wf.id,
-                    name=wf.filename
-                )
-            )
+    print("\n\n\n\n\n\n\n\n")
+    print("======== chat_files_list ========")
+    print(chat_files_list)
+    print("\n\n\n\n\n\n\n\n")
 
     # 5) Load model names
     models_query = db.query(ModelModel).filter(ModelModel.user_id == chat.user_id).all()
@@ -169,10 +183,9 @@ def build_initial_payload(db: Session, chat_id: str) -> dict:
         chat_id=str(chat.id),
         chat_name=chat.name,
         conversation=conversation_objs,
-        chat_files_text=chat_files_text_objs,
-        chat_files_based=chat_files_based_objs,
-        workspace_files=workspace_files_objs,
+        chat_files=chat_files_list,
         workspace_id=str(chat.workspace_id),
+        chat_files_based=chat_files_based_objs,
         models=model_names,
         initial=True
     )
